@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import numpy as np
 import torch
 
-from msst_api.separator import _state_matches, resolve_device
+from msst_api.separator import MSSeparator, _state_matches, resolve_device
 from msst_api.config import Settings
 from pathlib import Path
 import pytest
@@ -40,3 +41,40 @@ def test_resolve_device_allows_cpu_when_enabled():
         allow_cpu=True,
     )
     assert resolve_device("cpu", settings) == "cpu"
+
+
+class _FakeModel:
+    """Minimal stand-in exposing just the ``stereo`` attribute."""
+
+    def __init__(self, stereo: bool) -> None:
+        self.stereo = stereo
+
+
+def _coerce_channels(model, mix: np.ndarray) -> np.ndarray:
+    separator = object.__new__(MSSeparator)
+    separator.model = model
+    return separator._coerce_channels(mix)
+
+
+def test_coerce_channels_mono_model_keeps_mono_input():
+    mix = np.arange(8, dtype=np.float32).reshape(1, 8)
+    out = _coerce_channels(_FakeModel(False), mix)
+    assert out.shape == (1, 8)
+
+
+def test_coerce_channels_mono_model_downmixes_stereo_input():
+    mix = np.arange(16, dtype=np.float32).reshape(2, 8)
+    out = _coerce_channels(_FakeModel(False), mix)
+    assert out.shape == (1, 8)
+
+
+def test_coerce_channels_stereo_model_duplicates_mono_input():
+    mix = np.arange(8, dtype=np.float32).reshape(1, 8)
+    out = _coerce_channels(_FakeModel(True), mix)
+    assert out.shape == (2, 8)
+
+
+def test_coerce_channels_defaults_to_stereo_without_attribute():
+    mix = np.arange(8, dtype=np.float32).reshape(1, 8)
+    out = _coerce_channels(object(), mix)
+    assert out.shape == (2, 8)

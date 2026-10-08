@@ -359,10 +359,12 @@ class MSSeparator:
         return results
 
     def _coerce_channels(self, mix: np.ndarray) -> np.ndarray:
-        model_type = self.model_type
-        stereo = True
-        if model_type in {"bs_roformer", "mel_band_roformer"}:
-            stereo = bool(_config_get(self.config, "model", "stereo", True))
+        # Match the channel layout the built model expects.  Configs may omit
+        # ``model.stereo``, and several model classes default it to ``False``;
+        # assuming ``True`` here would feed stereo audio to a mono model and
+        # trip the model's forward assertion.  Reading the value back from the
+        # instantiated model keeps the two in sync regardless of the config.
+        stereo = bool(getattr(self.model, "stereo", True))
         if stereo and mix.shape[0] == 1:
             return np.repeat(mix, 2, axis=0)
         if stereo and mix.shape[0] > 2:
