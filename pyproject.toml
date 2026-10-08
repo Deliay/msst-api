@@ -1,0 +1,72 @@
+[project]
+name = "msst-api"
+version = "0.1.0"
+description = "GPU inference HTTP API for Music-Source-Separation-Training (MSST)."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = "MIT"
+authors = [{ name = "ZeroAsh" }]
+dependencies = [
+    # Installed from the SJTU CUDA 12.8 mirror (see [[tool.uv.index]] below).
+    # Declared explicitly so the mirror is applied to these transitive deps.
+    "torch>=2.4,<2.12",
+    "torchaudio>=2.4,<2.12",
+    "torchvision>=0.19",
+    # MSST engine + the model families used by the bundled catalog.
+    "msst[bs-roformer,mel-band-roformer,htdemucs,segm-models,swin-upernet,bandit,apollo,bs-conformer,mel-band-conformer,scnet-tran]>=0.1.0",
+    # Pin a modern transformers: the resolver otherwise picks 4.12.2, whose
+    # tokenizers 0.10.3 has no prebuilt wheels and must be compiled from Rust.
+    "transformers>=4.46,<5",
+    # HTTP API.
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    # Model download backends.
+    "huggingface-hub>=0.23",
+    "modelscope>=1.18",
+    "requests>=2.31",
+    # Audio IO.
+    "soundfile>=0.12",
+    "numpy>=1.23",
+]
+
+[project.scripts]
+msst-api = "msst_api.main:run"
+
+[project.urls]
+Homepage = "https://github.com/ZFTurbo/Music-Source-Separation-Training"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/msst_api"]
+
+# ---------------------------------------------------------------------------
+# Package indexes / mirrors
+# ---------------------------------------------------------------------------
+# Default everything to the Tsinghua PyPI mirror; pull PyTorch wheels from the
+# SJTU CUDA 12.8 mirror. Override either by editing this file or by exporting
+# UV_INDEX / UV_DEFAULT_INDEX in CI.
+[[tool.uv.index]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu128/"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[dependency-groups]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

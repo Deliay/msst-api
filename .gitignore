@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local model / audio artifacts
+models/
+results/
+outputs/
+*.wav
+*.flac
+*.mp3
+
+# Environment
+.env
+.DS_Store

@@ -1,0 +1,1167 @@
+{
+  "version": 1,
+  "generated_from": "SUC-DriverOld/MSST-WebUI data_backup/models_info.json",
+  "categories": {
+    "vocal_models": "Vocal models (vocals / instrumental)",
+    "single_stem_models": "Single stem models",
+    "multi_stem_models": "Multi stem models"
+  },
+  "models": {
+    "Apollo_LQ_MP3_restoration.ckpt": {
+      "id": "Apollo_LQ_MP3_restoration.ckpt",
+      "name": "Apollo_LQ_MP3_restoration.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "apollo",
+      "instruments": [
+        "restored",
+        "addition"
+      ],
+      "target_instrument": "restored",
+      "config": "configs/single_stem_models/Apollo_LQ_MP3_restoration.ckpt.yaml",
+      "size": 66541845,
+      "sha256": "99d9af7f1ff20e63c393035513a655392818d66b4d7fc23d658175c1f15e8d76",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/Apollo_LQ_MP3_restoration.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/Apollo_LQ_MP3_restoration.ckpt"
+        }
+      ]
+    },
+    "BS-Roformer_LargeV1.ckpt": {
+      "id": "BS-Roformer_LargeV1.ckpt",
+      "name": "BS-Roformer_LargeV1.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/BS-Roformer_LargeV1.ckpt.yaml",
+      "size": 740263433,
+      "sha256": "3d1334565bb9e4c08f4b3891d5ac39e269b511baf66024a3fd8a10112d52b945",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/BS-Roformer_LargeV1.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/BS-Roformer_LargeV1.ckpt"
+        }
+      ]
+    },
+    "HTDemucs4.th": {
+      "id": "HTDemucs4.th",
+      "name": "HTDemucs4.th",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/HTDemucs4.th.yaml",
+      "size": 84141911,
+      "sha256": "8726e21a993978c7ba086d3872e7608d7d5bfca646ca4aca459ffda844faa8b4",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/HTDemucs4.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/HTDemucs4.th"
+        }
+      ]
+    },
+    "HTDemucs4_6stems.th": {
+      "id": "HTDemucs4_6stems.th",
+      "name": "HTDemucs4_6stems.th",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals",
+        "guitar",
+        "piano"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/HTDemucs4_6stems.th.yaml",
+      "size": 54996327,
+      "sha256": "34c22ccb381c6f9fdbf324f04e1e2fe21aaaf293f5ded163a162697ff9a02ddd",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/HTDemucs4_6stems.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/HTDemucs4_6stems.th"
+        }
+      ]
+    },
+    "HTDemucs4_FT_bass.th": {
+      "id": "HTDemucs4_FT_bass.th",
+      "name": "HTDemucs4_FT_bass.th",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/HTDemucs4_FT_bass.th.yaml",
+      "size": 84141271,
+      "sha256": "e57c48e6b0e38af4f7118d7bd08c49f0a0c0edf7d09143bdd902ea0d237303e6",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/HTDemucs4_FT_bass.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/HTDemucs4_FT_bass.th"
+        }
+      ]
+    },
+    "HTDemucs4_FT_drums.th": {
+      "id": "HTDemucs4_FT_drums.th",
+      "name": "HTDemucs4_FT_drums.th",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/HTDemucs4_FT_drums.th.yaml",
+      "size": 84141271,
+      "sha256": "ba3fe64ae8ef66ac9a4857222ce48efbdc5eb3ad375cb79dd13debee5aaa4066",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/HTDemucs4_FT_drums.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/HTDemucs4_FT_drums.th"
+        }
+      ]
+    },
+    "HTDemucs4_FT_other.th": {
+      "id": "HTDemucs4_FT_other.th",
+      "name": "HTDemucs4_FT_other.th",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/HTDemucs4_FT_other.th.yaml",
+      "size": 84141271,
+      "sha256": "ef3bcb9c8b40d14ae5d51b6db2587339cc12c6b77c0be151ce6d69002e087bf2",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/HTDemucs4_FT_other.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/HTDemucs4_FT_other.th"
+        }
+      ]
+    },
+    "HTDemucs4_FT_vocals_official.th": {
+      "id": "HTDemucs4_FT_vocals_official.th",
+      "name": "HTDemucs4_FT_vocals_official.th",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/HTDemucs4_FT_vocals_official.th.yaml",
+      "size": 84141271,
+      "sha256": "f3cf25b222c4eed7cd49dd8b2c9597d50c18bd154090f7b919cfa5f93cf22c49",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/HTDemucs4_FT_vocals_official.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/HTDemucs4_FT_vocals_official.th"
+        }
+      ]
+    },
+    "Kim_MelBandRoformer.ckpt": {
+      "id": "Kim_MelBandRoformer.ckpt",
+      "name": "Kim_MelBandRoformer.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/Kim_MelBandRoformer.ckpt.yaml",
+      "size": 913106900,
+      "sha256": "87201f4d31afb5bc79993230fc49446918425574db48c01c405e44f365c7559e",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/Kim_MelBandRoformer.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/Kim_MelBandRoformer.ckpt"
+        }
+      ]
+    },
+    "apollo_model_uni.ckpt": {
+      "id": "apollo_model_uni.ckpt",
+      "name": "apollo_model_uni.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "apollo",
+      "instruments": [
+        "restored",
+        "addition"
+      ],
+      "target_instrument": "restored",
+      "config": "configs/single_stem_models/apollo_model_uni.ckpt.yaml",
+      "size": 146867952,
+      "sha256": "11433256eca90143d32f1108d156ac756fd0201fbc69e5f736def4062fb52186",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/apollo_model_uni.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/apollo_model_uni.ckpt"
+        }
+      ]
+    },
+    "aspiration_mel_band_roformer_less_aggr_sdr_18.1201.ckpt": {
+      "id": "aspiration_mel_band_roformer_less_aggr_sdr_18.1201.ckpt",
+      "name": "aspiration_mel_band_roformer_less_aggr_sdr_18.1201.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "aspiration",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/aspiration_mel_band_roformer_less_aggr_sdr_18.1201.ckpt.yaml",
+      "size": 835982664,
+      "sha256": "83bfe991cec4fbadde9f30d1f79cd5293ad0b1f936256be327bba5cbb4883374",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/aspiration_mel_band_roformer_less_aggr_sdr_18.1201.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/aspiration_mel_band_roformer_less_aggr_sdr_18.1201.ckpt"
+        }
+      ]
+    },
+    "aspiration_mel_band_roformer_sdr_18.9845.ckpt": {
+      "id": "aspiration_mel_band_roformer_sdr_18.9845.ckpt",
+      "name": "aspiration_mel_band_roformer_sdr_18.9845.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "aspiration",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/aspiration_mel_band_roformer_sdr_18.9845.ckpt.yaml",
+      "size": 835983746,
+      "sha256": "9e791258c866c6c8da66052693d8cc3b64f1f42c01e052dbdc570cd278380cc5",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/aspiration_mel_band_roformer_sdr_18.9845.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/aspiration_mel_band_roformer_sdr_18.9845.ckpt"
+        }
+      ]
+    },
+    "aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt": {
+      "id": "aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt",
+      "name": "aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "mdx23c",
+      "instruments": [
+        "kick",
+        "snare",
+        "toms",
+        "hh",
+        "ride",
+        "crash"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt.yaml",
+      "size": 437652699,
+      "sha256": "d2a4aa53eb584d21eead358a4e66d1882ad182911be018f052b5da73be9096d0",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt"
+        }
+      ]
+    },
+    "big_beta5e.ckpt": {
+      "id": "big_beta5e.ckpt",
+      "name": "big_beta5e.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/big_beta5e.ckpt.yaml",
+      "size": 1479749810,
+      "sha256": "32b876e1163716a9a007438b5a5107069586aa9b9ca653a5f63013b1edf6920c",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/big_beta5e.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/big_beta5e.ckpt"
+        }
+      ]
+    },
+    "bs_roformer_4stems_ft.ckpt": {
+      "id": "bs_roformer_4stems_ft.ckpt",
+      "name": "bs_roformer_4stems_ft.ckpt",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/bs_roformer_4stems_ft.ckpt.yaml",
+      "size": 527245586,
+      "sha256": "a64c61c5972fe3fdf331d98f06bb4d6e237147c83a4bc71fd4e00e254c9b7652",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/bs_roformer_4stems_ft.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/bs_roformer_4stems_ft.ckpt"
+        }
+      ]
+    },
+    "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt": {
+      "id": "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
+      "name": "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "male",
+        "female"
+      ],
+      "target_instrument": null,
+      "config": "configs/vocal_models/bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt.yaml",
+      "size": 527119779,
+      "sha256": "3cf11736d1b42a11ae55d8299316585921477dd2a671b24b663660846ca9861b",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt"
+        }
+      ]
+    },
+    "de_big_reverb_mbr_ep_362.ckpt": {
+      "id": "de_big_reverb_mbr_ep_362.ckpt",
+      "name": "de_big_reverb_mbr_ep_362.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "dry",
+        "other"
+      ],
+      "target_instrument": "dry",
+      "config": "configs/single_stem_models/de_big_reverb_mbr_ep_362.ckpt.yaml",
+      "size": 455864012,
+      "sha256": "0506455e74ffc02bbec700df9863ae243597034003815f1418227c6dee33b6ea",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/de_big_reverb_mbr_ep_362.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/de_big_reverb_mbr_ep_362.ckpt"
+        }
+      ]
+    },
+    "denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt": {
+      "id": "denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt",
+      "name": "denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "dry",
+        "other"
+      ],
+      "target_instrument": "dry",
+      "config": "configs/single_stem_models/denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt.yaml",
+      "size": 913097300,
+      "sha256": "a25e3b233722cd81e2de7b8e798a3fef29d4b9799ccacda60b0dc958a1e2a5bb",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt"
+        }
+      ]
+    },
+    "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt": {
+      "id": "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+      "name": "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "dry",
+        "other"
+      ],
+      "target_instrument": "dry",
+      "config": "configs/single_stem_models/denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt.yaml",
+      "size": 913097300,
+      "sha256": "7c1c39191edc34e942ca7f2346ce6b6c0e1208a5f76349ffce6f696bd12910de",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt"
+        }
+      ]
+    },
+    "dereverb_echo_mbr_fused_0.5_v2_0.25_big_0.25_super.ckpt": {
+      "id": "dereverb_echo_mbr_fused_0.5_v2_0.25_big_0.25_super.ckpt",
+      "name": "dereverb_echo_mbr_fused_0.5_v2_0.25_big_0.25_super.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "dry",
+        "other"
+      ],
+      "target_instrument": "dry",
+      "config": "configs/single_stem_models/dereverb_echo_mbr_fused_0.5_v2_0.25_big_0.25_super.ckpt.yaml",
+      "size": 455776577,
+      "sha256": "1596b1063238f487d54a0510a8c92cb28c000c803a271dd618ac49efc99ef3f7",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/dereverb_echo_mbr_fused_0.5_v2_0.25_big_0.25_super.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/dereverb_echo_mbr_fused_0.5_v2_0.25_big_0.25_super.ckpt"
+        }
+      ]
+    },
+    "dereverb_mdx23c_sdr_6.9096.ckpt": {
+      "id": "dereverb_mdx23c_sdr_6.9096.ckpt",
+      "name": "dereverb_mdx23c_sdr_6.9096.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mdx23c",
+      "instruments": [
+        "dry",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/single_stem_models/dereverb_mdx23c_sdr_6.9096.ckpt.yaml",
+      "size": 448098867,
+      "sha256": "eae2471b707758d74db38ac1b1d5800e12f57c4e9d1ebbb2faf004b8e086e914",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/dereverb_mdx23c_sdr_6.9096.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/dereverb_mdx23c_sdr_6.9096.ckpt"
+        }
+      ]
+    },
+    "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt": {
+      "id": "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
+      "name": "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "noreverb",
+        "reverb"
+      ],
+      "target_instrument": "noreverb",
+      "config": "configs/single_stem_models/dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt.yaml",
+      "size": 913107578,
+      "sha256": "9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt"
+        }
+      ]
+    },
+    "dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt": {
+      "id": "dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
+      "name": "dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "noreverb",
+        "reverb"
+      ],
+      "target_instrument": "noreverb",
+      "config": "configs/single_stem_models/dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt.yaml",
+      "size": 913107578,
+      "sha256": "0db8f1b41c00cead1112e967262a12802fd32e76c0c3a8eb207e772bae25d07b",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt"
+        }
+      ]
+    },
+    "deverb_bs_roformer_8_256dim_8depth.ckpt": {
+      "id": "deverb_bs_roformer_8_256dim_8depth.ckpt",
+      "name": "deverb_bs_roformer_8_256dim_8depth.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "noreverb",
+        "reverb"
+      ],
+      "target_instrument": "noreverb",
+      "config": "configs/single_stem_models/deverb_bs_roformer_8_256dim_8depth.ckpt.yaml",
+      "size": 170770820,
+      "sha256": "ee204fc59fa4111674536d47bd1ef3759acb9f7cf5a759ec4b867a828bb76c64",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/deverb_bs_roformer_8_256dim_8depth.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/deverb_bs_roformer_8_256dim_8depth.ckpt"
+        }
+      ]
+    },
+    "deverb_bs_roformer_8_384dim_10depth.ckpt": {
+      "id": "deverb_bs_roformer_8_384dim_10depth.ckpt",
+      "name": "deverb_bs_roformer_8_384dim_10depth.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "noreverb",
+        "reverb"
+      ],
+      "target_instrument": "noreverb",
+      "config": "configs/single_stem_models/deverb_bs_roformer_8_384dim_10depth.ckpt.yaml",
+      "size": 361499604,
+      "sha256": "9c38653aaa5e49f2f7b84dd3be2b6b679e0cbea23978e6b48389ee6f0a914768",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/deverb_bs_roformer_8_384dim_10depth.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/deverb_bs_roformer_8_384dim_10depth.ckpt"
+        }
+      ]
+    },
+    "deverb_mel_band_roformer_ep_27_sdr_10.4567.ckpt": {
+      "id": "deverb_mel_band_roformer_ep_27_sdr_10.4567.ckpt",
+      "name": "deverb_mel_band_roformer_ep_27_sdr_10.4567.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "noreverb",
+        "reverb"
+      ],
+      "target_instrument": "noreverb",
+      "config": "configs/single_stem_models/deverb_mel_band_roformer_ep_27_sdr_10.4567.ckpt.yaml",
+      "size": 489578757,
+      "sha256": "29c311f2f3561c73f2084d59aa5dc2a077d907293bbbb1ce6548247ddb0671ff",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/deverb_mel_band_roformer_ep_27_sdr_10.4567.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/deverb_mel_band_roformer_ep_27_sdr_10.4567.ckpt"
+        }
+      ]
+    },
+    "inst_v1e.ckpt": {
+      "id": "inst_v1e.ckpt",
+      "name": "inst_v1e.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "other",
+        "vocals"
+      ],
+      "target_instrument": "other",
+      "config": "configs/vocal_models/inst_v1e.ckpt.yaml",
+      "size": 913102724,
+      "sha256": "df2bcdb8838b88264f5381dbb0ccd84a9926c9775cf548c34d8846f5cd20fe96",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/inst_v1e.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/inst_v1e.ckpt"
+        }
+      ]
+    },
+    "kimmel_unwa_ft.ckpt": {
+      "id": "kimmel_unwa_ft.ckpt",
+      "name": "kimmel_unwa_ft.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/kimmel_unwa_ft.ckpt.yaml",
+      "size": 913100690,
+      "sha256": "e6bd8d333880191254a6ef6be3cb0ffa4dda9d3282e36b0cce2e88a660e00d39",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/kimmel_unwa_ft.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/kimmel_unwa_ft.ckpt"
+        }
+      ]
+    },
+    "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt": {
+      "id": "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt",
+      "name": "mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "crowd",
+        "other"
+      ],
+      "target_instrument": "crowd",
+      "config": "configs/single_stem_models/mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt.yaml",
+      "size": 913096801,
+      "sha256": "ca8799531fe51c94172cc047226209ed48bf7d8c02e04671795a15d2a1c318af",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt"
+        }
+      ]
+    },
+    "mel_band_roformer_instrumental_becruily.ckpt": {
+      "id": "mel_band_roformer_instrumental_becruily.ckpt",
+      "name": "mel_band_roformer_instrumental_becruily.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "Instrumental",
+        "Vocals"
+      ],
+      "target_instrument": "Instrumental",
+      "config": "configs/vocal_models/mel_band_roformer_instrumental_becruily.ckpt.yaml",
+      "size": 913106900,
+      "sha256": "a8da6632a1c25efb1c9be783ce9ea367d226d4b918cd6c3717c8b1d7a396041d",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/mel_band_roformer_instrumental_becruily.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/mel_band_roformer_instrumental_becruily.ckpt"
+        }
+      ]
+    },
+    "mel_band_roformer_vocals_becruily.ckpt": {
+      "id": "mel_band_roformer_vocals_becruily.ckpt",
+      "name": "mel_band_roformer_vocals_becruily.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/mel_band_roformer_vocals_becruily.ckpt.yaml",
+      "size": 913107578,
+      "sha256": "a05961310cc55fbb901290c2e8be02682942f73522b6ac76bf2ec11e347ed95a",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/mel_band_roformer_vocals_becruily.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/mel_band_roformer_vocals_becruily.ckpt"
+        }
+      ]
+    },
+    "melband_roformer_inst_v2.ckpt": {
+      "id": "melband_roformer_inst_v2.ckpt",
+      "name": "melband_roformer_inst_v2.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "other",
+        "vocals"
+      ],
+      "target_instrument": "other",
+      "config": "configs/vocal_models/melband_roformer_inst_v2.ckpt.yaml",
+      "size": 1574477088,
+      "sha256": "bd19766620f7d6f58fdf7aaada7e89907fe41bc64490ce3faa9a6dab15d6e1f2",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/melband_roformer_inst_v2.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/melband_roformer_inst_v2.ckpt"
+        }
+      ]
+    },
+    "melband_roformer_instvox_duality_v2.ckpt": {
+      "id": "melband_roformer_instvox_duality_v2.ckpt",
+      "name": "melband_roformer_instvox_duality_v2.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "Vocals",
+        "Instrumental"
+      ],
+      "target_instrument": null,
+      "config": "configs/vocal_models/melband_roformer_instvox_duality_v2.ckpt.yaml",
+      "size": 1719116358,
+      "sha256": "b4a69558708f2857e36ac86a0e03ed95c4e3d8b9c5b8113963987d0d7df7e20f",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/melband_roformer_instvox_duality_v2.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/melband_roformer_instvox_duality_v2.ckpt"
+        }
+      ]
+    },
+    "model_bandit_plus_dnr_sdr_11.47.chpt": {
+      "id": "model_bandit_plus_dnr_sdr_11.47.chpt",
+      "name": "model_bandit_plus_dnr_sdr_11.47.chpt",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "bandit",
+      "instruments": [
+        "speech",
+        "music",
+        "effects"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/model_bandit_plus_dnr_sdr_11.47.chpt.yaml",
+      "size": 148891175,
+      "sha256": "c48284779f7d1258a6527d3aaa18a532d45c1f506e2dcc25d5ab179a8c5e2573",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/model_bandit_plus_dnr_sdr_11.47.chpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/model_bandit_plus_dnr_sdr_11.47.chpt"
+        }
+      ]
+    },
+    "model_bs_roformer_ep_317_sdr_12.9755.ckpt": {
+      "id": "model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "name": "model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt.yaml",
+      "size": 639331213,
+      "sha256": "5b84f37e8d444c8cb30c79d77f613a41c05868ff9c9ac6c7049c00aefae115aa",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+        }
+      ]
+    },
+    "model_bs_roformer_ep_368_sdr_12.9628.ckpt": {
+      "id": "model_bs_roformer_ep_368_sdr_12.9628.ckpt",
+      "name": "model_bs_roformer_ep_368_sdr_12.9628.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "vocals",
+        "instrumental"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/model_bs_roformer_ep_368_sdr_12.9628.ckpt.yaml",
+      "size": 639317465,
+      "sha256": "f6c94864adfb73bbb0ca58ec14d58dd0b364549e9fb61433ae51916f3e2f8d0b",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_bs_roformer_ep_368_sdr_12.9628.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_bs_roformer_ep_368_sdr_12.9628.ckpt"
+        }
+      ]
+    },
+    "model_bs_roformer_ep_937_sdr_10.5309.ckpt": {
+      "id": "model_bs_roformer_ep_937_sdr_10.5309.ckpt",
+      "name": "model_bs_roformer_ep_937_sdr_10.5309.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/single_stem_models/model_bs_roformer_ep_937_sdr_10.5309.ckpt.yaml",
+      "size": 393068365,
+      "sha256": "a2e825a03bc908cb04dbd88eddeefbf5147dd1cf1f95cebf453d9dbfabec494b",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/model_bs_roformer_ep_937_sdr_10.5309.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/model_bs_roformer_ep_937_sdr_10.5309.ckpt"
+        }
+      ]
+    },
+    "model_drumsep.th": {
+      "id": "model_drumsep.th",
+      "name": "model_drumsep.th",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "htdemucs",
+      "instruments": [
+        "kick",
+        "snare",
+        "cymbals",
+        "toms"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/model_drumsep.th.yaml",
+      "size": 167400043,
+      "sha256": "aefaa8543c9b9c75e22f5f32b53ab86dfe416457849af1383ff1aef83401423f",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/model_drumsep.th",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/model_drumsep.th"
+        }
+      ]
+    },
+    "model_mdx23c_ep_168_sdr_7.0207.ckpt": {
+      "id": "model_mdx23c_ep_168_sdr_7.0207.ckpt",
+      "name": "model_mdx23c_ep_168_sdr_7.0207.ckpt",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "mdx23c",
+      "instruments": [
+        "vocals",
+        "bass",
+        "drums",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/model_mdx23c_ep_168_sdr_7.0207.ckpt.yaml",
+      "size": 448119834,
+      "sha256": "c1d31e3c47a98e8cdb12b3382a1a313c1a95c835da4310dd6350e7e1892f821c",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/model_mdx23c_ep_168_sdr_7.0207.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/model_mdx23c_ep_168_sdr_7.0207.ckpt"
+        }
+      ]
+    },
+    "model_mdx23c_ep_271_l1_freq_72.2383.ckpt": {
+      "id": "model_mdx23c_ep_271_l1_freq_72.2383.ckpt",
+      "name": "model_mdx23c_ep_271_l1_freq_72.2383.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "mdx23c",
+      "instruments": [
+        "similarity",
+        "difference"
+      ],
+      "target_instrument": "similarity",
+      "config": "configs/single_stem_models/model_mdx23c_ep_271_l1_freq_72.2383.ckpt.yaml",
+      "size": 437613512,
+      "sha256": "1227f8d97c7436004d03e46091427393abefebcc08ce53ef30082742c4e482f7",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/single_stem_models/model_mdx23c_ep_271_l1_freq_72.2383.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/model_mdx23c_ep_271_l1_freq_72.2383.ckpt"
+        }
+      ]
+    },
+    "model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt": {
+      "id": "model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt",
+      "name": "model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt.yaml",
+      "size": 1007816988,
+      "sha256": "21b9d0958e35b8ebfbe2afe69bbd5444e5ffe2f5d80ae0d583b833d2f3c0d139",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_mel_band_roformer_ep_3005_sdr_11.4360.ckpt"
+        }
+      ]
+    },
+    "model_mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt": {
+      "id": "model_mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+      "name": "model_mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "karaoke",
+        "other"
+      ],
+      "target_instrument": "karaoke",
+      "config": "configs/vocal_models/model_mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt.yaml",
+      "size": 913096801,
+      "sha256": "1de20d459332fe8869aeb01327a31df0032262706e1365114e852dc271779813",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt"
+        }
+      ]
+    },
+    "model_scnet_sdr_9.3244.ckpt": {
+      "id": "model_scnet_sdr_9.3244.ckpt",
+      "name": "model_scnet_sdr_9.3244.ckpt",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "scnet",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/model_scnet_sdr_9.3244.ckpt.yaml",
+      "size": 168868194,
+      "sha256": "fe550315a76e8f4aed8475d7d5952137504a3b6c63b3adcef2443bfe73aac540",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/model_scnet_sdr_9.3244.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/model_scnet_sdr_9.3244.ckpt"
+        }
+      ]
+    },
+    "model_swin_upernet_ep_56_sdr_10.6703.ckpt": {
+      "id": "model_swin_upernet_ep_56_sdr_10.6703.ckpt",
+      "name": "model_swin_upernet_ep_56_sdr_10.6703.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "swin_upernet",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/vocal_models/model_swin_upernet_ep_56_sdr_10.6703.ckpt.yaml",
+      "size": 939903161,
+      "sha256": "d59fa555bfcfc909b1aa9f7f961ad2ab41bfecd9d8d224defdd380cd3225c916",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_swin_upernet_ep_56_sdr_10.6703.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_swin_upernet_ep_56_sdr_10.6703.ckpt"
+        }
+      ]
+    },
+    "model_vocals_htdemucs_sdr_8.78.ckpt": {
+      "id": "model_vocals_htdemucs_sdr_8.78.ckpt",
+      "name": "model_vocals_htdemucs_sdr_8.78.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "htdemucs",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/vocal_models/model_vocals_htdemucs_sdr_8.78.ckpt.yaml",
+      "size": 168124336,
+      "sha256": "0ea6e9495685045e6b4e66174131be5d19808bb0d6d1a1ba717d238f9380e8d0",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_vocals_htdemucs_sdr_8.78.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_vocals_htdemucs_sdr_8.78.ckpt"
+        }
+      ]
+    },
+    "model_vocals_mdx23c_sdr_10.17.ckpt": {
+      "id": "model_vocals_mdx23c_sdr_10.17.ckpt",
+      "name": "model_vocals_mdx23c_sdr_10.17.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mdx23c",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/vocal_models/model_vocals_mdx23c_sdr_10.17.ckpt.yaml",
+      "size": 448101203,
+      "sha256": "49d51472769e34a2501cd1da782346a3212555c3a5619fc2c53507445528d816",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_vocals_mdx23c_sdr_10.17.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_vocals_mdx23c_sdr_10.17.ckpt"
+        }
+      ]
+    },
+    "model_vocals_mel_band_roformer_sdr_8.42.ckpt": {
+      "id": "model_vocals_mel_band_roformer_sdr_8.42.ckpt",
+      "name": "model_vocals_mel_band_roformer_sdr_8.42.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "mel_band_roformer",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": "vocals",
+      "config": "configs/vocal_models/model_vocals_mel_band_roformer_sdr_8.42.ckpt.yaml",
+      "size": 134917909,
+      "sha256": "d9ce706b49cebf0af018590d8deb47ad5434987bf8f7bd3a87a4e5e8c30acb26",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_vocals_mel_band_roformer_sdr_8.42.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_vocals_mel_band_roformer_sdr_8.42.ckpt"
+        }
+      ]
+    },
+    "model_vocals_segm_models_sdr_9.77.ckpt": {
+      "id": "model_vocals_segm_models_sdr_9.77.ckpt",
+      "name": "model_vocals_segm_models_sdr_9.77.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "segm_models",
+      "instruments": [
+        "vocals",
+        "other"
+      ],
+      "target_instrument": null,
+      "config": "configs/vocal_models/model_vocals_segm_models_sdr_9.77.ckpt.yaml",
+      "size": 863683537,
+      "sha256": "9cb6e969309f96602318fcf5970a6973899db86e5fd9d8f9cf8f15bacdd299bb",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/vocal_models/model_vocals_segm_models_sdr_9.77.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/vocal_models/model_vocals_segm_models_sdr_9.77.ckpt"
+        }
+      ]
+    },
+    "scnet_checkpoint_musdb18.ckpt": {
+      "id": "scnet_checkpoint_musdb18.ckpt",
+      "name": "scnet_checkpoint_musdb18.ckpt",
+      "category": "multi_stem_models",
+      "category_label": "Multi stem models",
+      "model_type": "scnet",
+      "instruments": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "target_instrument": null,
+      "config": "configs/multi_stem_models/scnet_checkpoint_musdb18.ckpt.yaml",
+      "size": 42434986,
+      "sha256": "1bc0d1abb20bfdf966dcd07637bafd03e4bc13653d09ef18bc9b3e342eafe2aa",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "Sucial/MSST-WebUI",
+          "file": "All_Models/multi_stem_models/scnet_checkpoint_musdb18.ckpt",
+          "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/multi_stem_models/scnet_checkpoint_musdb18.ckpt"
+        }
+      ]
+    }
+  }
+}

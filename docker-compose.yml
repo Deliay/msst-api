@@ -1,0 +1,30 @@
+services:
+  msst-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: msst-api:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # Model storage path (also mounted below).
+      MSST_MODEL_DIR: /models
+      # GPU-only by default. Set to "true" to allow CPU fallback.
+      MSST_ALLOW_CPU: "false"
+      MSST_DEVICE: cuda:0
+      # ModelScope is the default backend; falls back to Hugging Face.
+      MSST_DOWNLOAD_BACKEND: modelscope
+      # MSST_MODELSCOPE_MIRROR: your-org/MSST-WebUI
+      # MSST_HF_ENDPOINT: https://hf-mirror.com
+      MSST_MAX_LOADED_MODELS: "1"
+      MSST_MAX_CONCURRENCY: "1"
+    volumes:
+      - ./models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
