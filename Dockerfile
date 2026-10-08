@@ -44,7 +44,7 @@ RUN pip3 install --no-cache-dir --break-system-packages uv
 WORKDIR /app
 
 # 1) Resolve and install third-party dependencies (cached across source edits).
-COPY pyproject.toml uv.lock README.md THIRD_PARTY_NOTICES.md ./
+COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # 2) Copy the application source and install the project itself.
