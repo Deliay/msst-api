@@ -12,8 +12,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_HTTP_TIMEOUT=300 \
     PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
-# System toolchain + audio codecs. `ffmpeg` is needed for mp3 decode/encode.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Switch Ubuntu apt sources to the Tsinghua mirror, then install the system
+# toolchain + audio codecs. `ffmpeg` is needed for mp3 decode/encode.
+RUN set -eux; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do \
+        [ -f "$f" ] || continue; \
+        sed -i \
+            -e 's|archive.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' \
+            -e 's|security.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' \
+            -e 's|ports.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' \
+            -e 's|http://mirrors.tuna.tsinghua.edu.cn|https://mirrors.tuna.tsinghua.edu.cn|g' \
+            "$f"; \
+    done; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
         python3 \
         python3-venv \
         python3-dev \
@@ -23,8 +35,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         curl \
         ca-certificates \
-        build-essential \
-    && rm -rf /var/lib/apt/lists/*
+        build-essential; \
+    rm -rf /var/lib/apt/lists/*
 
 # Install uv from the Tsinghua PyPI mirror.
 RUN pip3 install --no-cache-dir --break-system-packages uv
