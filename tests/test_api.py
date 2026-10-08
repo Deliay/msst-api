@@ -66,7 +66,7 @@ def test_list_and_get_models(client):
     listing = client.get("/api/msst/models")
     assert listing.status_code == 200
     payload = listing.json()
-    assert payload["total"] == 49
+    assert payload["total"] == 51
 
     detail = client.get("/api/msst/models/model_bs_roformer_ep_317_sdr_12.9755.ckpt")
     assert detail.status_code == 200

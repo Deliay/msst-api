@@ -9,7 +9,7 @@
 - 缺失模型在首次推理时**自动下载**，支持 **ModelScope（默认）** 与 **Hugging Face**。
 - 模型存放路径通过环境变量 `MSST_MODEL_DIR` 指定。
 - 使用 [uv](https://docs.astral.sh/uv/) 管理依赖，默认**仅支持 GPU 推理**。
-- 内置 49 个来自 MSST 生态的预训练模型（人声/伴奏、单音轨、多音轨）。
+- 内置 51 个来自 MSST 生态的预训练模型（人声/伴奏、单音轨、多音轨）。
 
 > 参考实现：[MSST-WebUI](https://github.com/SUC-DriverOld/MSST-WebUI)、
 > [RVCSVC-API-MSST](https://github.com/sdfsfsk/RVCSVC-API-MSST)。

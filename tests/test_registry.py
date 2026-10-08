@@ -10,7 +10,7 @@ REGISTRY_JSON = BUNDLED_CONFIG_DIR.parent / "registry.json"
 
 def test_registry_loads_all_catalog_models() -> None:
     registry = get_registry()
-    assert len(registry) == 49
+    assert len(registry) == 51
     assert "model_bs_roformer_ep_317_sdr_12.9755.ckpt" in registry
 
 

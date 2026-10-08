@@ -13,7 +13,7 @@ Submit an audio file plus a model, and get the separated stems back.
 - The model storage path is set with the `MSST_MODEL_DIR` environment variable.
 - Dependencies are managed with [uv](https://docs.astral.sh/uv/); inference is
   **GPU-only** by default.
-- Ships with **49** pretrained models from the MSST ecosystem (vocals /
+- Ships with **51** pretrained models from the MSST ecosystem (vocals /
   instrumental, single-stem, multi-stem).
 
 > References: [MSST-WebUI](https://github.com/SUC-DriverOld/MSST-WebUI),

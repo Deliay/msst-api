@@ -372,6 +372,29 @@
         }
       ]
     },
+    "bs_roformer_karaoke_frazer_becruily.ckpt": {
+      "id": "bs_roformer_karaoke_frazer_becruily.ckpt",
+      "name": "bs_roformer_karaoke_frazer_becruily.ckpt",
+      "category": "vocal_models",
+      "category_label": "Vocal models (vocals / instrumental)",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "Vocals",
+        "Instrumental"
+      ],
+      "target_instrument": "Vocals",
+      "config": "configs/vocal_models/bs_roformer_karaoke_frazer_becruily.ckpt.yaml",
+      "size": 204436907,
+      "sha256": "eb90ee24c1154d83fbcfd27e96182f19e061557cc6e4746953125e08c29389f9",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "becruily/bs-roformer-karaoke",
+          "file": "bs_roformer_karaoke_frazer_becruily.ckpt",
+          "url": "https://huggingface.co/becruily/bs-roformer-karaoke/resolve/main/bs_roformer_karaoke_frazer_becruily.ckpt"
+        }
+      ]
+    },
     "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt": {
       "id": "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
       "name": "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt",
@@ -553,6 +576,29 @@
           "repo_id": "Sucial/MSST-WebUI",
           "file": "All_Models/single_stem_models/dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
           "url": "https://huggingface.co/Sucial/MSST-WebUI/resolve/main/All_Models/single_stem_models/dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt"
+        }
+      ]
+    },
+    "dereverb_room_anvuew_sdr_13.7432.ckpt": {
+      "id": "dereverb_room_anvuew_sdr_13.7432.ckpt",
+      "name": "dereverb_room_anvuew_sdr_13.7432.ckpt",
+      "category": "single_stem_models",
+      "category_label": "Single stem models",
+      "model_type": "bs_roformer",
+      "instruments": [
+        "noreverb",
+        "reverb"
+      ],
+      "target_instrument": "noreverb",
+      "config": "configs/single_stem_models/dereverb_room_anvuew_sdr_13.7432.ckpt.yaml",
+      "size": 118128452,
+      "sha256": "2edec521f09e26341c1923dc82c8c52dbc86478b42b9999f679535743c970cb3",
+      "sources": [
+        {
+          "backend": "huggingface",
+          "repo_id": "anvuew/dereverb_room",
+          "file": "dereverb_room_anvuew_sdr_13.7432.ckpt",
+          "url": "https://huggingface.co/anvuew/dereverb_room/resolve/main/dereverb_room_anvuew_sdr_13.7432.ckpt"
         }
       ]
     },
