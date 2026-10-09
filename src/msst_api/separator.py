@@ -133,6 +133,31 @@ def resolve_device(requested: str, settings: Settings) -> str:
     return requested
 
 
+class _MonoInputAdapter(torch.nn.Module):
+    """Feeds one channel of a (possibly duplicated) waveform to a mono model.
+
+    ``msst.utils.model_utils.demix`` unconditionally expands mono input to two
+    channels (``mix.repeat(2, 1)``) and slices the result back to one channel
+    afterwards.  That is correct for stereo architectures receiving mono, but
+    mono architectures (``model.stereo`` is ``False``) assert that the input
+    has exactly one channel, so the expansion trips their forward pass (e.g.
+    ``dereverb_room_anvuew_sdr_13.7432.ckpt``).
+
+    This adapter keeps the real model untouched and simply drops the duplicated
+    channel before the forward call.  It is a no-op once the upstream bug is
+    fixed, because a single-channel input is left as-is.
+    """
+
+    def __init__(self, model: torch.nn.Module) -> None:
+        super().__init__()
+        self.model = model
+        # Preserved so ``MSSeparator._coerce_channels`` can still read it.
+        self.stereo = bool(getattr(model, "stereo", True))
+
+    def forward(self, x: torch.Tensor, *args, **kwargs):  # noqa: ANN002, ANN003
+        return self.model(x[:, :1], *args, **kwargs)
+
+
 class MSSeparator:
     """Loads one MSST checkpoint and separates in-memory audio."""
 
@@ -179,6 +204,9 @@ class MSSeparator:
 
         model = model.to(self.device)
         model.eval()
+        if getattr(model, "stereo", True) is False:
+            # Work around msst's unconditional mono->stereo expansion in demix.
+            model = _MonoInputAdapter(model)
         self.model = model
         self.config = config
 
