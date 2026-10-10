@@ -35,6 +35,7 @@ RUN set -eux; \
         git \
         curl \
         ca-certificates \
+        cmake \
         build-essential; \
     rm -rf /var/lib/apt/lists/*
 
@@ -55,6 +56,8 @@ RUN uv sync --frozen --no-dev
 ENV MSST_MODEL_DIR=/models \
     MSST_RVC_MODEL_DIR=/models/rvc_models \
     MSST_RVC_ASSET_DIR=/models/rvc_assets \
+    MSST_ASR_MODEL_DIR=/models/asr \
+    MSST_V2M_MODEL_DIR=/models/v2m \
     MSST_TEMP_DIR=/tmp/msst-api \
     MSST_HOST=0.0.0.0 \
     MSST_PORT=8000 \
@@ -62,7 +65,7 @@ ENV MSST_MODEL_DIR=/models \
     MSST_ALLOW_CPU=false \
     MSST_DOWNLOAD_BACKEND=modelscope
 
-RUN mkdir -p /models/rvc_models /models/rvc_assets /tmp/msst-api
+RUN mkdir -p /models/rvc_models /models/rvc_assets /models/asr /models/v2m /tmp/msst-api
 VOLUME ["/models"]
 EXPOSE 8000
 

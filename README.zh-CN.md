@@ -7,6 +7,9 @@
 
 - `POST /api/msst/inference`：表单推理，支持指定 MSST 模型及其推理参数。
 - `POST /api/rvc/inference`：**RVC 声音转换**——把一段音频转换成已安装 RVC 音色模型的音色。
+- `POST /api/asr/transcribe`：**ASR 单句识别**（Qwen3-ASR / PinyinASR / RomajiASR）。
+- `WS /api/asr/streaming`：**流式 ASR**——通过 WebSocket 实时识别（仅 Qwen3-ASR）。
+- `POST /api/v2m/inference`：**Vocal2Midi**——人声转“带歌词对齐的 MIDI”（及 USTX/VSQX/TextGrid），以 zip 返回。
 - 缺失的 MSST 模型在首次推理时**自动下载**，支持 **ModelScope（默认）** 与 **Hugging Face**；
   RVC 音色模型从 `MSST_RVC_MODEL_DIR`（默认 `models/rvc_models`）读取。
 - 模型存放路径通过环境变量 `MSST_MODEL_DIR` 指定。
@@ -37,6 +40,18 @@
     │   ├── infer/                 # VoiceConverter 与转换流程
     │   ├── lib/                   # 网络结构、F0 预测器（rmvpe/crepe/fcpe）、工具
     │   └── configs/               # 采样率预设
+    ├── asr/                       # ASR 能力（asr + streaming_asr）
+    │   ├── catalog.py             # Qwen3-ASR / PinyinASR / RomajiASR 目录
+    │   ├── engines.py             # Qwen3-ASR + ONNX CTC 引擎与流式会话
+    │   └── manager.py             # 共享缓存模型管理器
+    ├── v2m/                       # Vocal2Midi 能力
+    │   ├── catalog.py             # GAME / TiFA / HubertFA / RMVPE / kashi-g2p
+    │   ├── manager.py             # 目录 + 存储 + 共享缓存
+    │   ├── pipeline.py            # 端到端流程（zip 输出）
+    │   ├── capabilities.py        # 分能力接口（切片/音高/音符/对齐/G2P）
+    │   ├── runtime.py             # 内置 loader 与共享缓存的桥接
+    │   └── _vendor/               # 内置 Vocal2Midi 推理运行时（Apache-2.0）
+    ├── model_store.py             # 多文件模型包 + 快照下载
     ├── download.py                # ModelScope / HuggingFace / URL 下载
     ├── registry.py                # 模型目录读取
     ├── audio.py                   # 音频解码/编码
@@ -233,6 +248,74 @@ curl -X POST http://localhost:8000/api/rvc/inference \
 
 ---
 
+## ASR（`asr`）与流式 ASR（`streaming_asr`）
+
+按能力暴露两个接口，支持模型各不相同：
+
+| 能力 | 接口 | 支持模型 |
+| --- | --- | --- |
+| `asr`（单句） | `POST /api/asr/transcribe` | Qwen3-ASR、PinyinASR、RomajiASR |
+| `streaming_asr`（流式） | `WS /api/asr/streaming` | 仅 Qwen3-ASR |
+
+模型包放在 `MSST_ASR_MODEL_DIR`（默认 `<MSST_MODEL_DIR>/asr`）。Qwen3-ASR 首次使用时
+从 Hub 自动下载；PinyinASR / RomajiASR 的 ONNX 包一般直接放入该目录（或通过自定义
+`MSST_ASR_CATALOG` 配置镜像源）。
+
+```bash
+curl http://localhost:8000/api/asr/models
+curl "http://localhost:8000/api/asr/models?task=streaming"     # 仅 Qwen3-ASR
+
+curl -X POST http://localhost:8000/api/asr/transcribe \
+  -F "audio=@vocal.wav" -F "model=qwen3-asr-1.7b" -F "language=zh"
+# PinyinASR：-F "model=pinyin-asr"；RomajiASR：-F "model=romaji-asr"
+```
+
+流式接口为 WebSocket：连接
+`ws://localhost:8000/api/asr/streaming?model=qwen3-asr-1.7b&language=zh`，发送
+float32 小端 PCM（或 `format=pcm_s16le` 的 int16）二进制帧；每个音频块返回
+`{"type":"partial",...}`，发送 `finish` 后返回 `{"type":"final",...}`。真正的增量解码
+使用 Qwen3-ASR 的 **vLLM** 后端（`pip install "qwen-asr[vllm]"`）；未安装 vLLM 时回退
+为对增长缓冲区反复解码（`MSST_ASR_STREAMING_BACKEND=auto|vllm|transformers`）。
+
+---
+
+## Vocal2Midi（`v2m`）
+
+`POST /api/v2m/inference` 复刻 Vocal2Midi 流程——切片 → ASR → 强制对齐（TiFA，或
+HubertFA）→ GAME 音符提取 → 量化 → 导出——并以 zip 返回所选产物及 `manifest.json`。
+
+```bash
+curl -X POST http://localhost:8000/api/v2m/inference \
+  -F "audio=@vocal.wav" \
+  -F "language=zh" \
+  -F "output_formats=mid,txt,ustx" \
+  -o vocal.zip
+```
+
+常用字段：`language`（`zh`/`ja`/`en`/`yue`）、`lyric_output_mode`、`original_lyrics`、
+`output_formats`（`mid,txt,csv,ustx,vsqx,textgrid,chunks,asr_match_log`）、`output_lyrics`、
+`alignment_engine`（`tifa`/`hfa`）、`chinese_asr_engine`（`qwen`/`pinyin`）、
+`japanese_asr_engine`（`romaji`/`qwen`）、`slicing_method`、`slice_min_sec`/`slice_max_sec`、
+`tempo`、`quantization_step`/`quantization_mode`、各模型 id（`asr_model`、`game_model`、
+`tifa_model` 等）、`device`、`source`。
+
+分能力接口：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v2m/models` | 列出 v2m 模型包 |
+| `POST` | `/api/v2m/models/{id}/download` | 预下载模型包 |
+| `POST` | `/api/v2m/slice` | 切片，返回分块 wav 的 zip |
+| `POST` | `/api/v2m/pitch` | RMVPE 音高曲线（JSON） |
+| `POST` | `/api/v2m/notes` | GAME 纯音高音符提取（JSON） |
+| `POST` | `/api/v2m/align` | 已知文本的强制对齐（TiFA，JSON） |
+| `POST` | `/api/v2m/g2p` | 字形转读音（kashi-g2p / 拼音） |
+
+> **所有**子系统的模型加载与推理（MSST、RVC、ASR、v2m）共用同一套全局 LRU 与并发预算
+> （`MSST_MAX_LOADED_MODELS` / `MSST_MAX_CONCURRENCY`），且仅在请求真正需要时才懒加载模型。
+
+---
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -242,6 +325,13 @@ curl -X POST http://localhost:8000/api/rvc/inference \
 | `MSST_RVC_MODEL_DIR` | `<MSST_MODEL_DIR>/rvc_models` | **RVC 音色模型目录**（扁平 `*.pth` + `*.index`） |
 | `MSST_RVC_ASSET_DIR` | `<MSST_MODEL_DIR>/rvc_assets` | RVC 特征提取器 / F0 预测器缓存 |
 | `MSST_RVC_EMBEDDER` | `contentvec` | 默认 RVC 特征提取器 |
+| `MSST_ASR_MODEL_DIR` | `<MSST_MODEL_DIR>/asr` | **ASR 模型包目录** |
+| `MSST_ASR_CATALOG` | 空 | 追加的 ASR 模型 JSON 目录 |
+| `MSST_ASR_DEFAULT_MODEL` | `qwen3-asr-1.7b` | 请求未指定 `model` 时使用的 ASR 模型 |
+| `MSST_ASR_STREAMING_BACKEND` | `auto` | 流式后端：`auto` / `vllm` / `transformers` |
+| `MSST_QWEN_ASR_DTYPE` | `bfloat16` | Qwen3-ASR 加载精度 |
+| `MSST_V2M_MODEL_DIR` | `<MSST_MODEL_DIR>/v2m` | **Vocal2Midi 模型包目录** |
+| `MSST_V2M_CATALOG` | 空 | 追加的 v2m 模型 JSON 目录 |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |
 | `MSST_ALLOW_CPU` | `false` | 是否允许 CPU 推理（默认仅 GPU） |

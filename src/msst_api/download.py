@@ -286,6 +286,70 @@ def download_model(
     )
 
 
+def download_snapshot(
+    repo_id: str,
+    dest: Path,
+    *,
+    backend: str,
+    repo_type: str = "model",
+    allow_patterns: list[str] | None = None,
+    settings: Settings | None = None,
+) -> Path:
+    """Download a whole repository snapshot into ``dest``.
+
+    Unlike :func:`download_model` (single file), this fetches every file of a
+    repository, which is how the multi-file ASR / Vocal2Midi model bundles
+    (Qwen3-ASR, GAME, TiFA, RMVPE, ...) are distributed.  Downloads happen into
+    a staging directory next to ``dest`` and are moved into place at the end so
+    an interrupted fetch never leaves a half-populated model directory.
+    """
+
+    settings = settings or get_settings()
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _clean_stale_staging(dest.parent)
+    staging = Path(tempfile.mkdtemp(prefix=".snap-", dir=str(dest.parent)))
+    try:
+        if backend == "huggingface":
+            os.environ.setdefault(
+                "HF_HUB_DOWNLOAD_TIMEOUT", str(int(settings.download_timeout or 60))
+            )
+            os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+            if settings.hf_endpoint:
+                os.environ.setdefault("HF_ENDPOINT", settings.hf_endpoint)
+            from huggingface_hub import snapshot_download
+
+            logger.info("Downloading hf snapshot %s -> %s", repo_id, dest)
+            snapshot_download(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                local_dir=str(staging),
+                endpoint=settings.hf_endpoint,
+                token=settings.hf_token,
+                allow_patterns=allow_patterns,
+            )
+        elif backend == "modelscope":
+            from modelscope import snapshot_download as ms_snapshot_download
+
+            logger.info("Downloading modelscope snapshot %s -> %s", repo_id, dest)
+            ms_snapshot_download(
+                repo_id,
+                repo_type=repo_type,
+                local_dir=str(staging),
+                token=settings.modelscope_token,
+                allow_patterns=allow_patterns,
+            )
+        else:
+            raise DownloadError(f"Unsupported snapshot backend: {backend}")
+
+        if dest.exists():
+            shutil.rmtree(dest, ignore_errors=True)
+        os.replace(staging, dest)
+        return dest
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def download_url(url: str, dest: Path, settings: Settings | None = None) -> Path:
     """Download an arbitrary URL to ``dest`` (used for ad-hoc configs/weights)."""
 

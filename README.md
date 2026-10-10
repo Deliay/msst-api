@@ -10,6 +10,12 @@ Submit an audio file plus a model, and get the separated stems back.
   and its parameters.
 - `POST /api/rvc/inference`: **RVC voice conversion** — convert an audio clip to
   the timbre of an installed RVC voice model.
+- `POST /api/asr/transcribe`: **ASR** — single-sentence recognition
+  (Qwen3-ASR / PinyinASR / RomajiASR).
+- `WS /api/asr/streaming`: **streaming ASR** — live recognition over a
+  WebSocket (Qwen3-ASR only).
+- `POST /api/v2m/inference`: **Vocal2Midi** — vocal audio → lyric-aligned MIDI
+  (and USTX/VSQX/TextGrid), returned as a zip.
 - Missing MSST models are **downloaded automatically** on first use, from
   **ModelScope (default)** or **Hugging Face**; RVC voice models are read from
   `MSST_RVC_MODEL_DIR` (`models/rvc_models` by default).
@@ -43,6 +49,18 @@ Submit an audio file plus a model, and get the separated stems back.
     │   ├── infer/                 # VoiceConverter + conversion pipeline
     │   ├── lib/                   # algorithm, predictors (rmvpe/crepe/fcpe), utils
     │   └── configs/               # sample-rate presets
+    ├── asr/                       # ASR capability (asr + streaming_asr)
+    │   ├── catalog.py             # Qwen3-ASR / PinyinASR / RomajiASR catalog
+    │   ├── engines.py             # Qwen3-ASR + ONNX CTC engines, streaming sessions
+    │   └── manager.py             # shared-cache model manager
+    ├── v2m/                       # Vocal2Midi capability
+    │   ├── catalog.py             # GAME / TiFA / HubertFA / RMVPE / kashi-g2p
+    │   ├── manager.py             # catalog + store + shared cache wiring
+    │   ├── pipeline.py            # end-to-end pipeline (zip output)
+    │   ├── capabilities.py        # per-capability helpers (slice/pitch/notes/align/g2p)
+    │   ├── runtime.py             # shared-cache bridge for the vendored loaders
+    │   └── _vendor/               # vendored Vocal2Midi inference runtime (Apache-2.0)
+    ├── model_store.py             # multi-file model bundles + snapshot downloads
     ├── download.py                # ModelScope / HuggingFace / URL downloads
     ├── registry.py                # model catalog access
     ├── audio.py                   # audio decoding / encoding
@@ -245,6 +263,133 @@ and the wall-clock seconds.
 
 ---
 
+## ASR (`asr`) and streaming ASR (`streaming_asr`)
+
+Two capabilities are exposed, backed by **different engines**:
+
+| Capability | Endpoint | Models |
+| --- | --- | --- |
+| `asr` (single sentence) | `POST /api/asr/transcribe` | Qwen3-ASR, PinyinASR, RomajiASR |
+| `streaming_asr` | `WS /api/asr/streaming` | Qwen3-ASR only |
+
+Model bundles live under `MSST_ASR_MODEL_DIR` (default `<MSST_MODEL_DIR>/asr`).
+Qwen3-ASR is downloaded from the Hub on first use; PinyinASR / RomajiASR ONNX
+bundles are typically placed there directly (or fetched via a custom
+`MSST_ASR_CATALOG`).
+
+### 1. List models
+
+```bash
+curl http://localhost:8000/api/asr/models
+curl "http://localhost:8000/api/asr/models?task=streaming"   # Qwen3-ASR only
+```
+
+### 2. Single-sentence transcription
+
+```bash
+curl -X POST http://localhost:8000/api/asr/transcribe \
+  -F "audio=@vocal.wav" -F "model=qwen3-asr-1.7b" -F "language=zh"
+# {"model":"qwen3-asr-1.7b","text":"...","language":"Chinese","elapsed_seconds":...}
+```
+
+`PinyinASR` returns toneless pinyin tokens, `RomajiASR` returns romaji mora
+tokens (both include a `phonemes` list):
+
+```bash
+curl -X POST http://localhost:8000/api/asr/transcribe \
+  -F "audio=@vocal.wav" -F "model=pinyin-asr"
+```
+
+### 3. Streaming (WebSocket)
+
+Connect to `ws://localhost:8000/api/asr/streaming?model=qwen3-asr-1.7b&language=zh`
+and send binary audio frames (float32 little-endian PCM at `sample_rate`, or
+int16 with `format=pcm_s16le`). The server replies with
+`{"type":"partial","text":...}` after each frame and `{"type":"final",...}`
+when you send `finish`.
+
+```python
+import asyncio, json, websockets
+
+async def main():
+    async with websockets.connect(
+        "ws://localhost:8000/api/asr/streaming?model=qwen3-asr-1.7b&language=zh"
+    ) as ws:
+        print(await ws.recv())              # {"type": "ready", ...}
+        await ws.send(pcm_f32_bytes)        # one or more audio frames
+        print(await ws.recv())              # {"type": "partial", ...}
+        await ws.send("finish")
+        print(await ws.recv())              # {"type": "final", ...}
+
+asyncio.run(main())
+```
+
+True incremental decoding uses the Qwen3-ASR **vLLM** backend
+(`pip install "qwen-asr[vllm]"`). Without vLLM the endpoint falls back to
+repeatedly re-decoding a growing buffer with the transformers backend
+(`MSST_ASR_STREAMING_BACKEND=auto|vllm|transformers`).
+
+---
+
+## Vocal2Midi (`v2m`)
+
+`POST /api/v2m/inference` mirrors Vocal2Midi's pipeline — slicing → ASR →
+forced alignment (TiFA, or HubertFA) → GAME note extraction → quantization →
+export — and returns a zip of the requested artifacts plus a `manifest.json`.
+
+```bash
+curl -X POST http://localhost:8000/api/v2m/inference \
+  -F "audio=@vocal.wav" \
+  -F "language=zh" \
+  -F "output_formats=mid,txt,ustx" \
+  -o vocal.zip
+```
+
+### `POST /api/v2m/inference` form fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `audio` | file (required) | Input vocal audio. |
+| `language` | str | `zh`, `ja`, `en`, `yue` (default `zh`). |
+| `lyric_output_mode` | str | `auto` / `hanzi` / `pinyin` / `romaji` / `kana` / `word` / `jyutping`. |
+| `original_lyrics` | str | Optional reference lyrics for matching. |
+| `output_formats` | str | Comma list: `mid` (default), `txt`, `csv`, `ustx`, `vsqx`, `textgrid`, `chunks`, `asr_match_log`. |
+| `output_lyrics` | bool | `true` (default) runs ASR + alignment; `false` extracts pitch only. |
+| `alignment_engine` | str | `tifa` (default) or `hfa`. |
+| `chinese_asr_engine` | str | `qwen` (default) or `pinyin`. |
+| `japanese_asr_engine` | str | `romaji` (default) or `qwen`. |
+| `japanese_g2p_engine` | str | `kashi-g2p-onnx` (default) or `pyopenjtalk`. |
+| `slicing_method` | str | `auto` / `default` / `smart` / `heuristic` / `grid`. |
+| `slice_min_sec` / `slice_max_sec` | float | Slice bounds (defaults 5 / 10). |
+| `tempo` | float | Export tempo (default 120). |
+| `quantization_step` / `quantization_mode` | int / str | Quantization (default `0` / `smart`). |
+| `output_pitch_curve` | bool | Include an RMVPE pitch curve in USTX/VSQX. |
+| `asr_model`, `pinyin_asr_model`, `romaji_asr_model` | str | ASR model ids. |
+| `game_model`, `tifa_model`, `hfa_model`, `rmvpe_model`, `kashi_g2p_model` | str | v2m model ids. |
+| `device` | str | Defaults to `MSST_DEVICE`. |
+| `source` | str | Download backend for this request: `modelscope` / `huggingface` / `auto`. |
+
+### Per-capability endpoints
+
+Each pipeline stage is also exposed on its own:
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/v2m/models` | List v2m bundles (GAME / TiFA / HubertFA / RMVPE / kashi-g2p). |
+| `POST` | `/api/v2m/models/{id}/download` | Pre-download a bundle. |
+| `POST` | `/api/v2m/slice` | Silence/pitch-based slicing → zip of chunk wavs. |
+| `POST` | `/api/v2m/pitch` | RMVPE F0 curve (JSON). |
+| `POST` | `/api/v2m/notes` | GAME pitch-only note extraction (JSON). |
+| `POST` | `/api/v2m/align` | Forced alignment of a known transcript (TiFA, JSON). |
+| `POST` | `/api/v2m/g2p` | Grapheme-to-phoneme reading (kashi-g2p / pinyin). |
+
+> Model loading and inference for **all** subsystems (MSST, RVC, ASR, v2m)
+> share the same global LRU and concurrency budgets
+> (`MSST_MAX_LOADED_MODELS` / `MSST_MAX_CONCURRENCY`), and every model is loaded
+> lazily only when a request needs it.
+
+---
+
 ## Environment variables
 
 | Variable | Default | Description |
@@ -254,6 +399,13 @@ and the wall-clock seconds.
 | `MSST_RVC_MODEL_DIR` | `<MSST_MODEL_DIR>/rvc_models` | **RVC voice model directory** (flat `*.pth` + `*.index`) |
 | `MSST_RVC_ASSET_DIR` | `<MSST_MODEL_DIR>/rvc_assets` | Cache for RVC embedders / F0 predictors |
 | `MSST_RVC_EMBEDDER` | `contentvec` | Default RVC feature extractor |
+| `MSST_ASR_MODEL_DIR` | `<MSST_MODEL_DIR>/asr` | **ASR model bundle directory** |
+| `MSST_ASR_CATALOG` | empty | Extra JSON catalog for ASR models |
+| `MSST_ASR_DEFAULT_MODEL` | `qwen3-asr-1.7b` | ASR model used when a request omits `model` |
+| `MSST_ASR_STREAMING_BACKEND` | `auto` | Streaming backend: `auto` / `vllm` / `transformers` |
+| `MSST_QWEN_ASR_DTYPE` | `bfloat16` | dtype used to load Qwen3-ASR |
+| `MSST_V2M_MODEL_DIR` | `<MSST_MODEL_DIR>/v2m` | **Vocal2Midi model bundle directory** |
+| `MSST_V2M_CATALOG` | empty | Extra JSON catalog for v2m models |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |
 | `MSST_ALLOW_CPU` | `false` | Allow CPU inference (GPU-only by default) |

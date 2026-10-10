@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from msst_api.config import Settings
+from msst_api.model_store import ModelAssetNotFound, ModelEntry, ModelStore
+
+
+def _settings(tmp_path: Path) -> Settings:
+    return Settings(model_dir=tmp_path / "models")
+
+
+def test_is_downloaded_checks_required_files(tmp_path):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="bundle",
+        capability="asr",
+        kind="x",
+        name="Bundle",
+        dir_name="bundle",
+        required_files=("config.json", "model.onnx"),
+    )
+    store.register([entry], "asr")
+    assert store.is_downloaded(entry) is False
+
+    dest = store.path_for(entry)
+    dest.mkdir(parents=True)
+    (dest / "config.json").write_text("{}")
+    assert store.is_downloaded(entry) is False
+    (dest / "model.onnx").write_bytes(b"x")
+    assert store.is_downloaded(entry) is True
+
+
+def test_ensure_downloads_snapshot_into_place(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="bundle",
+        capability="asr",
+        kind="x",
+        name="Bundle",
+        dir_name="bundle",
+        required_files=("config.json",),
+        snapshots=({"backend": "huggingface", "repo_id": "org/repo"},),
+    )
+    store.register([entry], "asr")
+
+    calls = {}
+
+    def fake_snapshot(repo_id, dest, *, backend, **kwargs):
+        calls["repo_id"] = repo_id
+        calls["backend"] = backend
+        Path(dest).mkdir(parents=True, exist_ok=True)
+        (Path(dest) / "config.json").write_text("{}")
+        return Path(dest)
+
+    monkeypatch.setattr("msst_api.model_store.download_snapshot", fake_snapshot)
+    path = store.ensure(entry)
+    assert path.is_dir()
+    assert (path / "config.json").is_file()
+    assert calls == {"repo_id": "org/repo", "backend": "huggingface"}
+
+
+def test_ensure_without_source_raises(tmp_path):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(id="none", capability="v2m", kind="x", name="None", dir_name="none")
+    store.register([entry], "v2m")
+    with pytest.raises(Exception):
+        store.ensure(entry)
+
+
+def test_unknown_model_raises(tmp_path):
+    store = ModelStore(_settings(tmp_path))
+    with pytest.raises(ModelAssetNotFound):
+        store.get("does-not-exist")
+
+
+def test_custom_catalog_override(tmp_path):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    store.register(
+        [ModelEntry(id="a", capability="asr", kind="x", name="A")], "asr"
+    )
+    catalog = tmp_path / "cat.json"
+    catalog.write_text(
+        '{"models": [{"id": "a", "kind": "y", "name": "A2", "tasks": ["transcribe"]}]}',
+        encoding="utf-8",
+    )
+    store.load_json(catalog, "asr", override=True)
+    assert store.get("a").kind == "y"
+    assert store.get("a").tasks == ("transcribe",)

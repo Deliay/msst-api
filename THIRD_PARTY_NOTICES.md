@@ -30,6 +30,37 @@ and model artifacts. It does not redistribute model weights.
 - Auxiliary assets (ContentVec embedder, RMVPE F0 predictor) are downloaded at
   runtime from the Hugging Face repository `IAHispano/Applio`.
 
+## Vocal2Midi (v2m pipeline)
+
+- Source: https://github.com/Xiantaidu/Vocal2Midi
+- License: Apache-2.0
+- The Vocal2Midi inference pipeline (slicing, GAME note extraction, TiFA /
+  HubertFA forced alignment, G2P, quantization and MIDI/USTX/VSQX/TextGrid
+  export) is vendored under `src/msst_api/v2m/_vendor/` (`inference/` and
+  `application/`), adapted to run headless on CUDA/CPU onnxruntime instead of
+  DirectML. The Qwen3-ASR GGUF/llama.cpp runtime is **not** vendored; Qwen3-ASR
+  runs through the official `qwen-asr` package (see below).
+- The vendor tree also embeds the following upstream components:
+  - TiFA — https://github.com/openvpi/TIFA (MIT)
+  - GAME — https://github.com/openvpi/GAME (MIT)
+  - HubertFA — https://github.com/wolfgitpr/HubertFA
+  - LyricFA — https://github.com/wolfgitpr/LyricFA
+  - kashi-g2p — https://github.com/Xiantaidu/kashi-g2p (Apache-2.0; the
+    compiled lexicon embeds JMdict/KANJIDIC2 (CC BY-SA 4.0), UniDic (BSD) and
+    other dictionary data)
+  - RMVPE, cc-cedict / cc-canto dictionary data (see the license files shipped
+    inside the vendor tree)
+- Vendored G2P dictionaries under `src/msst_api/v2m/_vendor/inference/**/dicts`
+  retain their own licenses (CC-CEDICT / CC-CANTO / UniDic); see the
+  `License.txt` files beside them.
+
+## ASR models
+
+- Qwen3-ASR — https://github.com/QwenLM/Qwen3-ASR (Apache-2.0). Used via the
+  official `qwen-asr` package; weights are downloaded on first use.
+- PinyinASR — https://github.com/Xiantaidu/PinyinASR (Apache-2.0).
+- RomajiASR — https://github.com/Xiantaidu/RomajiASR (Apache-2.0).
+
 ## Pretrained weights
 
 Checkpoints are downloaded at runtime from the Hugging Face repository

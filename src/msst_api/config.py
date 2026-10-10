@@ -87,6 +87,42 @@ class Settings:
         default_factory=lambda: os.environ.get("MSST_RVC_EMBEDDER", "contentvec").strip().lower()
     )
 
+    # --- ASR (speech / lyric recognition) ---------------------------------
+    #: Directory holding ASR model bundles.  Defaults to ``<model_dir>/asr``
+    #: (``MSST_ASR_MODEL_DIR``).
+    asr_model_dir: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_ASR_MODEL_DIR")
+    )
+    #: Optional JSON catalog extending/replacing the bundled ASR catalog.
+    asr_catalog: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_ASR_CATALOG")
+    )
+    #: ASR model used when a request omits ``model`` (``MSST_ASR_DEFAULT_MODEL``).
+    asr_default_model: str = field(
+        default_factory=lambda: os.environ.get("MSST_ASR_DEFAULT_MODEL", "qwen3-asr-1.7b").strip()
+    )
+    #: Preferred backend for streaming Qwen3-ASR: ``auto`` (vLLM if installed,
+    #: else chunked transformers), ``vllm`` or ``transformers``
+    #: (``MSST_ASR_STREAMING_BACKEND``).
+    asr_streaming_backend: str = field(
+        default_factory=lambda: os.environ.get("MSST_ASR_STREAMING_BACKEND", "auto").strip().lower()
+    )
+    #: dtype used to load Qwen3-ASR (``MSST_QWEN_ASR_DTYPE``).
+    qwen_asr_dtype: str = field(
+        default_factory=lambda: os.environ.get("MSST_QWEN_ASR_DTYPE", "bfloat16").strip().lower()
+    )
+
+    # --- Vocal2Midi --------------------------------------------------------
+    #: Directory holding Vocal2Midi model bundles (GAME, TiFA, RMVPE, ...).
+    #: Defaults to ``<model_dir>/v2m`` (``MSST_V2M_MODEL_DIR``).
+    v2m_model_dir: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_V2M_MODEL_DIR")
+    )
+    #: Optional JSON catalog extending/replacing the bundled v2m catalog.
+    v2m_catalog: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_V2M_CATALOG")
+    )
+
     # --- Server ------------------------------------------------------------
     host: str = field(default_factory=lambda: os.environ.get("MSST_HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: _env_int("MSST_PORT", 8000))
@@ -174,6 +210,14 @@ class Settings:
             self.rvc_asset_dir = self.model_dir / "rvc_assets"
         self.rvc_model_dir = Path(self.rvc_model_dir).expanduser().resolve()
         self.rvc_asset_dir = Path(self.rvc_asset_dir).expanduser().resolve()
+        if self.asr_model_dir is None:
+            self.asr_model_dir = self.model_dir / "asr"
+        if self.v2m_model_dir is None:
+            self.v2m_model_dir = self.model_dir / "v2m"
+        self.asr_model_dir = Path(self.asr_model_dir).expanduser().resolve()
+        self.v2m_model_dir = Path(self.v2m_model_dir).expanduser().resolve()
+        if self.asr_streaming_backend not in {"auto", "vllm", "transformers"}:
+            self.asr_streaming_backend = "auto"
         if self.download_backend not in {"modelscope", "huggingface", "auto"}:
             self.download_backend = "auto"
 

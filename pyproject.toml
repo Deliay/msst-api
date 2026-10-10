@@ -37,6 +37,16 @@ dependencies = [
     "noisereduce>=3.0",
     "pedalboard>=0.9",
     "stftpitchshift>=1.5",
+    # ASR + Vocal2Midi capability. The Vocal2Midi inference runtimes are
+    # vendored under src/msst_api/v2m/_vendor and run on onnxruntime.
+    "onnxruntime-gpu>=1.20",
+    "qwen-asr>=0.0.6",              # Qwen3-ASR (transformers backend; streaming needs qwen-asr[vllm])
+    "mido>=1.3",                    # MIDI export
+    "textgrid>=1.6",               # TextGrid export
+    "tqdm>=4.66",
+    "click>=8.1",
+    "pyopenjtalk>=0.4",            # Japanese G2P fallback
+    "opencc-python-reimplemented>=0.1.7",  # traditional -> simplified (Cantonese)
 ]
 
 [project.scripts]

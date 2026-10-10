@@ -12,11 +12,22 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import torch
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
+from .asr.manager import ASRError, ASRManager, ASRModelNotFoundError
 from .audio import (
     RVC_OUTPUT_FORMATS,
     SUPPORTED_OUTPUT_FORMATS,
@@ -39,14 +50,21 @@ from .rvc_engine import (
     RVCVoiceSpec,
 )
 from .schemas import (
+    ASRModelInfo,
+    ASRModelListResponse,
+    ASRTranscriptionResponse,
     HealthResponse,
     InferenceMetadata,
     ModelInfo,
     ModelListResponse,
     RVCVoiceInfo,
     RVCVoiceListResponse,
+    V2MInferenceMetadata,
+    V2MModelInfo,
+    V2MModelListResponse,
 )
 from .separator import InferenceError, ModelManager, ModelSpec, resolve_device
+from .v2m.manager import V2MError, V2MManager, V2MModelNotFoundError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +74,8 @@ logger = logging.getLogger("msst_api")
 
 TAG = "MSST"
 RVC_TAG = "RVC"
+ASR_TAG = "ASR"
+V2M_TAG = "Vocal2Midi"
 
 
 @asynccontextmanager
@@ -65,19 +85,35 @@ async def lifespan(app: FastAPI):
     settings.model_dir.mkdir(parents=True, exist_ok=True)
     settings.rvc_model_dir.mkdir(parents=True, exist_ok=True)
     settings.rvc_asset_dir.mkdir(parents=True, exist_ok=True)
+    settings.asr_model_dir.mkdir(parents=True, exist_ok=True)
+    settings.v2m_model_dir.mkdir(parents=True, exist_ok=True)
     app.state.settings = settings
-    # One governor shared by MSST and RVC so MSST_MAX_LOADED_MODELS and
-    # MSST_MAX_CONCURRENCY are global budgets across both subsystems.
+    # One governor shared by MSST, RVC, ASR and Vocal2Midi so
+    # MSST_MAX_LOADED_MODELS and MSST_MAX_CONCURRENCY are global budgets across
+    # every subsystem.
     shared_cache = SharedModelCache(
         settings.max_loaded_models, settings.max_concurrency
     )
     app.state.manager = ModelManager(settings, cache=shared_cache)
     app.state.rvc_manager = RVCManager(settings, cache=shared_cache)
+    app.state.asr_manager = ASRManager(settings, cache=shared_cache)
+    app.state.v2m_manager = V2MManager(settings, cache=shared_cache)
+    # Let the vendored v2m runtimes route their loaders through the same cache.
+    from .v2m import runtime as v2m_runtime
+
+    v2m_runtime.configure(
+        settings=settings,
+        cache=shared_cache,
+        asr_manager=app.state.asr_manager,
+        v2m_manager=app.state.v2m_manager,
+    )
     logger.info(
-        "MSST API ready. model_dir=%s rvc_model_dir=%s device=%s "
-        "max_loaded_models=%s max_concurrency=%s",
+        "MSST API ready. model_dir=%s rvc_model_dir=%s asr_model_dir=%s "
+        "v2m_model_dir=%s device=%s max_loaded_models=%s max_concurrency=%s",
         settings.model_dir,
         settings.rvc_model_dir,
+        settings.asr_model_dir,
+        settings.v2m_model_dir,
         settings.device,
         settings.max_loaded_models,
         settings.max_concurrency,
@@ -87,6 +123,8 @@ async def lifespan(app: FastAPI):
     finally:
         app.state.manager.unload()
         app.state.rvc_manager.unload()
+        app.state.asr_manager.unload()
+        app.state.v2m_manager.unload()
 
 
 app = FastAPI(
@@ -107,6 +145,14 @@ def _manager() -> ModelManager:
 
 def _rvc_manager() -> RVCManager:
     return app.state.rvc_manager
+
+
+def _asr_manager() -> ASRManager:
+    return app.state.asr_manager
+
+
+def _v2m_manager() -> V2MManager:
+    return app.state.v2m_manager
 
 
 def _settings() -> Settings:
@@ -136,6 +182,26 @@ async def _download_error(request, exc: DownloadError):  # noqa: ANN001
     return JSONResponse(status_code=502, content={"detail": str(exc)})
 
 
+@app.exception_handler(ASRModelNotFoundError)
+async def _asr_model_not_found(request, exc: ASRModelNotFoundError):  # noqa: ANN001
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(ASRError)
+async def _asr_error(request, exc: ASRError):  # noqa: ANN001
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+@app.exception_handler(V2MError)
+async def _v2m_error(request, exc: V2MError):  # noqa: ANN001
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+@app.exception_handler(V2MModelNotFoundError)
+async def _v2m_model_not_found(request, exc: V2MModelNotFoundError):  # noqa: ANN001
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
 # ---------------------------------------------------------------------------
 # Health / catalog
 # ---------------------------------------------------------------------------
@@ -148,6 +214,11 @@ def root() -> dict:
         "models": "GET /api/msst/models",
         "rvc_inference": "POST /api/rvc/inference",
         "rvc_models": "GET /api/rvc/models",
+        "asr_inference": "POST /api/asr/transcribe",
+        "asr_streaming": "WS /api/asr/streaming",
+        "asr_models": "GET /api/asr/models",
+        "v2m_inference": "POST /api/v2m/inference",
+        "v2m_models": "GET /api/v2m/models",
     }
 
 
@@ -164,6 +235,11 @@ def health() -> HealthResponse:
         loaded_models=manager.loaded,
         rvc_model_dir=str(settings.rvc_model_dir),
         rvc_loaded_models=_rvc_manager().loaded,
+        asr_model_dir=str(settings.asr_model_dir),
+        v2m_model_dir=str(settings.v2m_model_dir),
+        asr_loaded_models=_asr_manager().loaded,
+        v2m_loaded_models=_v2m_manager().loaded,
+        asr_streaming_backend=settings.asr_streaming_backend,
     )
 
 
@@ -658,6 +734,565 @@ async def rvc_inference(request: Request):
     finally:
         if not settings.keep_temp:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# ASR (single-sentence ``asr`` + streaming ``streaming_asr``)
+# ---------------------------------------------------------------------------
+def _asr_model_info(manager: ASRManager, entry) -> ASRModelInfo:  # noqa: ANN001
+    public = entry.to_public_dict(downloaded=manager.is_downloaded(entry))
+    return ASRModelInfo(
+        id=public["id"],
+        name=public["name"],
+        capability=public["capability"],
+        kind=public["kind"],
+        description=public["description"],
+        tasks=public["tasks"],
+        languages=public["languages"],
+        downloaded=public["downloaded"],
+        extra=public.get("extra"),
+    )
+
+
+def _v2m_model_info(manager: V2MManager, entry) -> V2MModelInfo:  # noqa: ANN001
+    public = entry.to_public_dict(downloaded=manager.is_downloaded(entry))
+    return V2MModelInfo(
+        id=public["id"],
+        name=public["name"],
+        capability=public["capability"],
+        kind=public["kind"],
+        description=public["description"],
+        tasks=public["tasks"],
+        languages=public["languages"],
+        downloaded=public["downloaded"],
+        extra=public.get("extra"),
+    )
+
+
+@app.get("/api/asr/models", response_model=ASRModelListResponse, tags=[ASR_TAG])
+def list_asr_models(
+    task: str | None = None, downloaded: bool | None = None
+) -> ASRModelListResponse:
+    manager = _asr_manager()
+    items: list[ASRModelInfo] = []
+    for entry in manager.models():
+        if task and task not in entry.tasks:
+            continue
+        is_downloaded = manager.is_downloaded(entry)
+        if downloaded is not None and is_downloaded != downloaded:
+            continue
+        items.append(_asr_model_info(manager, entry))
+    return ASRModelListResponse(total=len(items), models=items)
+
+
+@app.get("/api/asr/models/{model_id}", response_model=ASRModelInfo, tags=[ASR_TAG])
+def get_asr_model(model_id: str) -> ASRModelInfo:
+    manager = _asr_manager()
+    return _asr_model_info(manager, manager.get_entry(model_id))
+
+
+@app.post("/api/asr/models/{model_id}/download", response_model=ASRModelInfo, tags=[ASR_TAG])
+def download_asr_model(model_id: str, source: str | None = None) -> ASRModelInfo:
+    manager = _asr_manager()
+    entry, _path = manager.ensure_path(model_id, source=source)
+    return _asr_model_info(manager, entry)
+
+
+def _read_upload_limited(upload: UploadFile, settings: Settings) -> bytes:
+    data = upload.file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+    max_bytes = int(settings.max_upload_mb * 1024 * 1024)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Upload exceeds MSST_MAX_UPLOAD_MB ({settings.max_upload_mb} MB)",
+        )
+    return data
+
+
+@app.post("/api/asr/transcribe", response_model=ASRTranscriptionResponse, tags=[ASR_TAG])
+@app.post(
+    "/api/asr/inference",
+    response_model=ASRTranscriptionResponse,
+    include_in_schema=False,
+    tags=[ASR_TAG],
+)
+def asr_transcribe(
+    audio: UploadFile = File(..., description="Input audio (wav/flac/mp3/m4a/...)."),
+    model: str | None = Form(None, description="ASR model id from GET /api/asr/models."),
+    language: str | None = Form(None, description="Language hint, e.g. zh/ja/en/yue."),
+    context: str | None = Form(None, description="Optional ASR context / prompt."),
+    device: str | None = Form(None),
+    source: str | None = Form(None, description="Download backend: modelscope | huggingface."),
+):
+    settings = _settings()
+    started = time.time()
+    model_id = (model or settings.asr_default_model).strip()
+    temp_dir = Path(tempfile.mkdtemp(prefix="asr-", dir=str(settings.temp_dir)))
+    try:
+        data = _read_upload_limited(audio, settings)
+        upload_path = save_upload(
+            data, Path(audio.filename or "input.wav").suffix or ".wav", temp_dir
+        )
+        try:
+            wav = decode_audio_mono(upload_path, 16000)
+        except Exception as error:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Cannot decode audio: {error}") from error
+        result = _asr_manager().transcribe(
+            model_id,
+            wav,
+            language=language,
+            context=context,
+            device=device,
+            source=source,
+        )
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    return ASRTranscriptionResponse(
+        model=model_id,
+        text=result.text,
+        language=result.language,
+        phonemes=result.phonemes,
+        elapsed_seconds=round(time.time() - started, 3),
+    )
+
+
+def _pcm_to_16k(data: bytes, fmt: str, sample_rate: int):  # noqa: ANN201
+    if fmt in {"pcm_s16le", "s16le", "int16"}:
+        audio = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+    else:
+        audio = np.frombuffer(data, dtype="<f4").astype(np.float32)
+    if sample_rate != 16000 and audio.size:
+        import soxr
+
+        audio = soxr.resample(audio, sample_rate, 16000).astype(np.float32)
+    return audio
+
+
+@app.websocket("/api/asr/streaming")
+@app.websocket("/api/asr/streaming_asr")
+async def asr_streaming(websocket: WebSocket) -> None:
+    """Streaming ASR (``streaming_asr``). Qwen3-ASR only.
+
+    Protocol: the client opens the socket with ``?model=&language=&format=&sample_rate=``
+    then sends binary audio frames (float32 little-endian PCM at ``sample_rate``,
+    or int16 when ``format=pcm_s16le``).  The server replies with JSON messages:
+    ``{"type": "ready"|"partial"|"final"|"error", ...}``.  Send ``"finish"``
+    (text) or ``{"type": "finish"}` (JSON) to flush the final transcript.
+    """
+
+    await websocket.accept()
+    settings = _settings()
+    params = websocket.query_params
+    model_id = (params.get("model") or settings.asr_default_model).strip()
+    language = params.get("language")
+    context = params.get("context")
+    fmt = (params.get("format") or "pcm_f32").lower()
+    try:
+        sample_rate = int(params.get("sample_rate") or 16000)
+    except ValueError:
+        sample_rate = 16000
+
+    session = None
+    try:
+        try:
+            session = await run_in_threadpool(
+                _asr_manager().open_stream,
+                model_id,
+                language=language,
+                context=context,
+                device=params.get("device"),
+                source=params.get("source"),
+            )
+        except (ASRError, ASRModelNotFoundError) as error:
+            await websocket.send_json({"type": "error", "detail": str(error)})
+            await websocket.close()
+            return
+
+        await websocket.send_json({"type": "ready", "model": model_id})
+        while True:
+            try:
+                message = await websocket.receive()
+            except WebSocketDisconnect:
+                break
+            if message.get("type") == "websocket.disconnect":
+                break
+            if message.get("bytes") is not None:
+                wav = _pcm_to_16k(message["bytes"], fmt, sample_rate)
+                try:
+                    result = await run_in_threadpool(session.feed, wav)
+                except Exception as error:  # noqa: BLE001
+                    await websocket.send_json({"type": "error", "detail": str(error)})
+                    break
+                await websocket.send_json(
+                    {"type": "partial", "text": result.text, "language": result.language}
+                )
+                continue
+            text = message.get("text")
+            if text is None:
+                continue
+            payload = text.strip()
+            if payload in {"finish", "final", "stop"} or '"finish"' in payload:
+                result = await run_in_threadpool(session.finish)
+                await websocket.send_json(
+                    {"type": "final", "text": result.text, "language": result.language}
+                )
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if session is not None:
+            try:
+                session.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("Error closing ASR streaming session")
+
+
+# ---------------------------------------------------------------------------
+# Vocal2Midi (v2m)
+# ---------------------------------------------------------------------------
+@app.get("/api/v2m/models", response_model=V2MModelListResponse, tags=[V2M_TAG])
+def list_v2m_models(
+    task: str | None = None, downloaded: bool | None = None
+) -> V2MModelListResponse:
+    manager = _v2m_manager()
+    items: list[V2MModelInfo] = []
+    for entry in manager.models():
+        if task and task not in entry.tasks:
+            continue
+        is_downloaded = manager.is_downloaded(entry)
+        if downloaded is not None and is_downloaded != downloaded:
+            continue
+        items.append(_v2m_model_info(manager, entry))
+    return V2MModelListResponse(total=len(items), models=items)
+
+
+@app.get("/api/v2m/models/{model_id}", response_model=V2MModelInfo, tags=[V2M_TAG])
+def get_v2m_model(model_id: str) -> V2MModelInfo:
+    manager = _v2m_manager()
+    return _v2m_model_info(manager, manager.get_entry(model_id))
+
+
+@app.post("/api/v2m/models/{model_id}/download", response_model=V2MModelInfo, tags=[V2M_TAG])
+def download_v2m_model(model_id: str, source: str | None = None) -> V2MModelInfo:
+    manager = _v2m_manager()
+    manager.resolve_path(model_id, source=source)
+    return _v2m_model_info(manager, manager.get_entry(model_id))
+
+
+_V2M_TRUE = {"1", "true", "yes", "on", "y", "t"}
+
+
+def _form_str(form, key: str, default: str | None = None) -> str | None:  # noqa: ANN001
+    value = form.get(key)
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text if text != "" else default
+
+
+def _form_float(form, key: str, default: float) -> float:  # noqa: ANN001
+    value = form.get(key)
+    try:
+        return float(value) if value not in (None, "") else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _form_int(form, key: str, default: int) -> int:  # noqa: ANN001
+    value = form.get(key)
+    try:
+        return int(float(value)) if value not in (None, "") else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _form_bool(form, key: str, default: bool = False) -> bool:  # noqa: ANN001
+    value = form.get(key)
+    if value in (None, ""):
+        return default
+    return str(value).strip().lower() in _V2M_TRUE
+
+
+def _build_v2m_request(form) -> object:  # noqa: ANN001
+    from .v2m.pipeline import SUPPORTED_OUTPUT_FORMATS, V2MRequest
+
+    formats_raw = _form_str(form, "output_formats") or _form_str(form, "output_format") or "mid"
+    formats = [item.strip().lower() for item in formats_raw.split(",") if item.strip()]
+    invalid = [fmt for fmt in formats if fmt not in SUPPORTED_OUTPUT_FORMATS]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output format(s): {invalid}. Expected {sorted(SUPPORTED_OUTPUT_FORMATS)}",
+        )
+    return V2MRequest(
+        language=_form_str(form, "language", "zh") or "zh",
+        lyric_output_mode=_form_str(form, "lyric_output_mode", "auto") or "auto",
+        original_lyrics=_form_str(form, "original_lyrics", "") or "",
+        output_formats=formats,
+        slicing_method=_form_str(form, "slicing_method", "auto") or "auto",
+        slice_min_sec=_form_float(form, "slice_min_sec", 5.0),
+        slice_max_sec=_form_float(form, "slice_max_sec", 10.0),
+        tempo=_form_float(form, "tempo", 120.0),
+        quantization_step=_form_int(form, "quantization_step", 0),
+        quantization_mode=_form_str(form, "quantization_mode", "smart") or "smart",
+        quant_simplicity=_form_float(form, "quant_simplicity", 0.0),
+        pitch_format=_form_str(form, "pitch_format", "name") or "name",
+        round_pitch=_form_bool(form, "round_pitch", True),
+        seg_threshold=_form_float(form, "seg_threshold", 0.2),
+        seg_radius=_form_float(form, "seg_radius", 0.02),
+        est_threshold=_form_float(form, "est_threshold", 0.2),
+        batch_size=_form_int(form, "batch_size", 1),
+        asr_batch_size=_form_int(form, "asr_batch_size", 2),
+        output_lyrics=_form_bool(form, "output_lyrics", True),
+        output_pitch_curve=_form_bool(form, "output_pitch_curve", False),
+        chinese_asr_engine=_form_str(form, "chinese_asr_engine", "qwen") or "qwen",
+        japanese_asr_engine=_form_str(form, "japanese_asr_engine", "romaji") or "romaji",
+        alignment_engine=_form_str(form, "alignment_engine", "tifa") or "tifa",
+        japanese_g2p_engine=_form_str(form, "japanese_g2p_engine", "kashi-g2p-onnx") or "kashi-g2p-onnx",
+        asr_model=_form_str(form, "asr_model"),
+        pinyin_asr_model=_form_str(form, "pinyin_asr_model", "pinyin-asr") or "pinyin-asr",
+        romaji_asr_model=_form_str(form, "romaji_asr_model", "romaji-asr") or "romaji-asr",
+        game_model=_form_str(form, "game_model", "game") or "game",
+        tifa_model=_form_str(form, "tifa_model", "tifa") or "tifa",
+        hfa_model=_form_str(form, "hfa_model", "hubertfa") or "hubertfa",
+        rmvpe_model=_form_str(form, "rmvpe_model", "rmvpe") or "rmvpe",
+        kashi_g2p_model=_form_str(form, "kashi_g2p_model", "kashi-g2p-onnx") or "kashi-g2p-onnx",
+        device=_form_str(form, "device"),
+        source=_form_str(form, "source"),
+    )
+
+
+@app.post("/api/v2m/inference", tags=[V2M_TAG])
+async def v2m_inference(request: Request):
+    """Vocal2Midi pipeline: vocal audio -> lyric-aligned MIDI (zip)."""
+
+    settings = _settings()
+    started = time.time()
+    form = await request.form()
+    upload = form.get("audio") or form.get("file") or form.get("input")
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(status_code=400, detail="multipart field 'audio' (file) is required.")
+
+    v2m_request = _build_v2m_request(form)
+    data = await upload.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+    max_bytes = int(settings.max_upload_mb * 1024 * 1024)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Upload exceeds MSST_MAX_UPLOAD_MB ({settings.max_upload_mb} MB)",
+        )
+
+    output_key = Path(upload.filename or "vocal.wav").stem or "vocal"
+    temp_dir = Path(tempfile.mkdtemp(prefix="v2m-", dir=str(settings.temp_dir)))
+    output_dir = temp_dir / "out"
+    try:
+        upload_path = save_upload(
+            data, Path(upload.filename or "vocal.wav").suffix or ".wav", temp_dir
+        )
+        from .v2m.pipeline import run_v2m_pipeline
+
+        def _run():
+            return run_v2m_pipeline(
+                settings=settings,
+                asr_manager=_asr_manager(),
+                v2m=_v2m_manager(),
+                audio_path=upload_path,
+                output_filename=f"{output_key}.wav",
+                output_dir=output_dir,
+                request=v2m_request,
+            )
+
+        try:
+            outputs = await run_in_threadpool(_run)
+        except (V2MError, ASRError):
+            raise
+        except Exception as error:  # noqa: BLE001
+            logger.exception("v2m inference failed")
+            raise HTTPException(status_code=500, detail=f"v2m inference failed: {error}") from error
+
+        metadata = V2MInferenceMetadata(
+            language=v2m_request.language,
+            lyric_output_mode=v2m_request.lyric_output_mode,
+            output_formats=v2m_request.output_formats,
+            alignment_engine=v2m_request.alignment_engine,
+            chinese_asr_engine=v2m_request.chinese_asr_engine,
+            japanese_asr_engine=v2m_request.japanese_asr_engine,
+            files=sorted(outputs),
+            elapsed_seconds=round(time.time() - started, 3),
+        )
+        files = dict(outputs)
+        files["manifest.json"] = json.dumps(metadata.model_dump(), indent=2).encode("utf-8")
+        archive = build_zip(files)
+        headers = {"Content-Disposition": f'attachment; filename="{output_key}.zip"'}
+        return Response(content=archive, media_type="application/zip", headers=headers)
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+async def _decode_capability_audio(request: Request, sample_rate: int):  # noqa: ANN202
+    form = await request.form()
+    upload = form.get("audio") or form.get("file") or form.get("input")
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(status_code=400, detail="multipart field 'audio' (file) is required.")
+    settings = _settings()
+    data = await upload.read()
+    temp_dir = Path(tempfile.mkdtemp(prefix="v2m-cap-", dir=str(settings.temp_dir)))
+    upload_path = save_upload(
+        data, Path(upload.filename or "input.wav").suffix or ".wav", temp_dir
+    )
+    return form, upload_path, temp_dir
+
+
+@app.post("/api/v2m/slice", tags=[V2M_TAG])
+async def v2m_slice(request: Request):
+    """Capability: slice audio into chunks and return a zip of wavs."""
+
+    settings = _settings()
+    form = await request.form()
+    upload = form.get("audio") or form.get("file") or form.get("input")
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(status_code=400, detail="multipart field 'audio' (file) is required.")
+    sample_rate = _form_int(form, "sample_rate", 44100)
+    data = await upload.read()
+    temp_dir = Path(tempfile.mkdtemp(prefix="v2m-slice-", dir=str(settings.temp_dir)))
+    try:
+        upload_path = save_upload(data, Path(upload.filename or "a.wav").suffix or ".wav", temp_dir)
+        wav = decode_audio_mono(upload_path, sample_rate)
+
+        from .v2m._vendor.inference.API.slicer_api import (
+            normalize_slicing_method,
+            slice_audio_with_custom_bounds,
+        )
+
+        raw_chunks = slice_audio_with_custom_bounds(
+            wav,
+            sample_rate,
+            normalize_slicing_method(_form_str(form, "slicing_method", "auto") or "auto"),
+            min_len_sec=_form_float(form, "slice_min_sec", 5.0),
+            max_len_sec=_form_float(form, "slice_max_sec", 10.0),
+        )
+        manifest = []
+        files: dict[str, bytes] = {}
+        for idx, chunk in enumerate(raw_chunks):
+            waveform = np.asarray(chunk["waveform"], dtype=np.float32)
+            if waveform.ndim == 1:
+                waveform = waveform[:, np.newaxis]
+            files[f"chunk_{idx:03d}.wav"] = encode_audio(waveform, sample_rate, fmt="wav")
+            manifest.append({"offset": float(chunk["offset"]), "num_samples": int(waveform.shape[0])})
+        files["manifest.json"] = json.dumps({"chunks": manifest}, indent=2).encode("utf-8")
+        archive = build_zip(files)
+        return Response(
+            content=archive,
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="chunks.zip"'},
+        )
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.post("/api/v2m/pitch", tags=[V2M_TAG])
+async def v2m_pitch(request: Request):
+    """Capability: RMVPE F0 curve for an audio clip."""
+
+    settings = _settings()
+    form, upload_path, temp_dir = await _decode_capability_audio(request, 16000)
+    try:
+        wav = decode_audio_mono(upload_path, 16000)
+        from .v2m.capabilities import extract_pitch
+
+        return JSONResponse(
+            extract_pitch(
+                _v2m_manager(),
+                wav,
+                16000,
+                device=_form_str(form, "device"),
+                source=_form_str(form, "source"),
+            )
+        )
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.post("/api/v2m/notes", tags=[V2M_TAG])
+async def v2m_notes(request: Request):
+    """Capability: GAME note extraction (pitch-only) for an audio clip."""
+
+    settings = _settings()
+    form, upload_path, temp_dir = await _decode_capability_audio(request, 44100)
+    try:
+        wav = decode_audio_mono(upload_path, 44100)
+        from .v2m.capabilities import extract_notes
+
+        notes = extract_notes(
+            _v2m_manager(),
+            wav,
+            44100,
+            device=_form_str(form, "device"),
+            source=_form_str(form, "source"),
+        )
+        return JSONResponse({"notes": notes, "count": len(notes)})
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.post("/api/v2m/align", tags=[V2M_TAG])
+async def v2m_align(request: Request):
+    """Capability: forced alignment of a known transcript (TiFA)."""
+
+    settings = _settings()
+    form, upload_path, temp_dir = await _decode_capability_audio(request, 44100)
+    try:
+        text = _form_str(form, "text") or _form_str(form, "lyrics")
+        if not text:
+            raise HTTPException(status_code=400, detail="Field 'text' is required for alignment.")
+        wav = decode_audio_mono(upload_path, 44100)
+        from .v2m.capabilities import align_text
+
+        return JSONResponse(
+            align_text(
+                _v2m_manager(),
+                wav,
+                44100,
+                text,
+                language=_form_str(form, "language", "zh") or "zh",
+                device=_form_str(form, "device"),
+                source=_form_str(form, "source"),
+            )
+        )
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.post("/api/v2m/g2p", tags=[V2M_TAG])
+def v2m_g2p(
+    text: str = Form(..., description="Text to convert to a reading."),
+    language: str = Form("ja"),
+    engine: str = Form("kashi-g2p-onnx"),
+    source: str | None = Form(None),
+):
+    """Capability: grapheme-to-phoneme reading (kashi-g2p / pinyin)."""
+
+    from .v2m.capabilities import g2p_reading
+
+    return JSONResponse(
+        g2p_reading(
+            _v2m_manager(),
+            text,
+            language=language,
+            engine=engine,
+            source=source,
+        )
+    )
 
 
 def run() -> None:
