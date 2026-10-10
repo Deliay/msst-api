@@ -13,6 +13,8 @@ class HealthResponse(BaseModel):
     model_dir: str
     download_backend: str
     loaded_models: list[str] = Field(default_factory=list)
+    rvc_model_dir: str | None = None
+    rvc_loaded_models: list[str] = Field(default_factory=list)
 
 
 class ModelInfo(BaseModel):
@@ -41,3 +43,16 @@ class InferenceMetadata(BaseModel):
     stems: list[str]
     output_format: str
     elapsed_seconds: float
+
+
+class RVCVoiceInfo(BaseModel):
+    id: str
+    name: str
+    has_index: bool = False
+    size: int | None = None
+    downloaded: bool = True
+
+
+class RVCVoiceListResponse(BaseModel):
+    total: int
+    voices: list[RVCVoiceInfo]

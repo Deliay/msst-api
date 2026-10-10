@@ -23,6 +23,44 @@ VALID_SUBTYPES = {
     "flac": {"PCM_S8", "PCM_16", "PCM_24"},
 }
 
+#: Output containers the RVC endpoint accepts (the reference plugin's set).
+RVC_OUTPUT_FORMATS = {
+    "wav",
+    "mp3",
+    "flac",
+    "ogg",
+    "opus",
+    "m4a",
+    "aac",
+    "aiff",
+    "ac3",
+}
+
+_AUDIO_MIME = {
+    "wav": "audio/wav",
+    "mp3": "audio/mpeg",
+    "flac": "audio/flac",
+    "ogg": "audio/ogg",
+    "opus": "audio/opus",
+    "m4a": "audio/mp4",
+    "aac": "audio/aac",
+    "aiff": "audio/aiff",
+    "ac3": "audio/ac3",
+}
+
+_FFMPEG_OUTPUT = {
+    "mp3": ["-f", "mp3", "-codec:a", "libmp3lame", "-q:a", "2"],
+    "ogg": ["-f", "ogg", "-codec:a", "libvorbis", "-q:a", "5"],
+    "opus": ["-f", "opus", "-codec:a", "libopus", "-b:a", "192k"],
+    "m4a": [
+        "-f", "mp4", "-codec:a", "aac", "-b:a", "256k",
+        "-movflags", "frag_keyframe+empty_moov",
+    ],
+    "aac": ["-f", "adts", "-codec:a", "aac", "-b:a", "256k"],
+    "aiff": ["-f", "aiff", "-codec:a", "pcm_s16be"],
+    "ac3": ["-f", "ac3", "-codec:a", "ac3", "-b:a", "192k"],
+}
+
 
 def decode_audio(path: Path, sample_rate: int) -> np.ndarray:
     """Decode an audio file to a channels-first ``float32`` array."""
@@ -32,6 +70,13 @@ def decode_audio(path: Path, sample_rate: int) -> np.ndarray:
     if mix.ndim == 1:
         mix = mix[np.newaxis, :]
     return mix
+
+
+def decode_audio_mono(path: Path, sample_rate: int) -> np.ndarray:
+    """Decode an audio file to a flat mono ``float32`` array (RVC input)."""
+
+    audio, _ = librosa.load(str(path), sr=sample_rate, mono=True)
+    return np.asarray(audio, dtype=np.float32).flatten()
 
 
 def _ffmpeg_available() -> bool:
@@ -83,6 +128,49 @@ def encode_audio(
             f"ffmpeg failed to encode MP3: {process.stderr.decode(errors='ignore')}"
         )
     return process.stdout
+
+
+def encode_audio_dynamic(
+    audio: np.ndarray, sample_rate: int, fmt: str
+) -> tuple[bytes, str]:
+    """Encode a flat/mono or ``(samples, channels)`` array for the RVC endpoint.
+
+    Returns ``(content, media_type)``.  WAV/FLAC use libsndfile; the remaining
+    containers are transcoded through ffmpeg, mirroring the reference plugin.
+    """
+
+    fmt = (fmt or "wav").lower().lstrip(".")
+    if fmt not in RVC_OUTPUT_FORMATS:
+        raise ValueError(
+            f"Unsupported output format {fmt!r}; expected one of {sorted(RVC_OUTPUT_FORMATS)}"
+        )
+
+    audio = np.asarray(audio, dtype=np.float32)
+
+    if fmt in {"wav", "flac"}:
+        buffer = io.BytesIO()
+        sf.write(buffer, audio, int(sample_rate), format=fmt.upper())
+        return buffer.getvalue(), _AUDIO_MIME[fmt]
+
+    # Everything else goes through an ffmpeg pipe (WAV is the interchange).
+    if not _ffmpeg_available():
+        raise RuntimeError(f"ffmpeg is required to encode {fmt.upper()} output")
+    wav_buffer = io.BytesIO()
+    sf.write(wav_buffer, audio, int(sample_rate), format="WAV")
+    process = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0"]
+        + _FFMPEG_OUTPUT[fmt]
+        + ["pipe:1"],
+        input=wav_buffer.getvalue(),
+        capture_output=True,
+        check=False,
+    )
+    if process.returncode != 0 or not process.stdout:
+        raise RuntimeError(
+            f"ffmpeg failed to encode {fmt.upper()}: "
+            f"{process.stderr.decode(errors='ignore')[-400:]}"
+        )
+    return process.stdout, _AUDIO_MIME[fmt]
 
 
 def build_zip(files: dict[str, bytes]) -> bytes:

@@ -8,16 +8,21 @@ Submit an audio file plus a model, and get the separated stems back.
 
 - `POST /api/msst/inference`: form-based inference; pick any supported MSST model
   and its parameters.
-- Missing models are **downloaded automatically** on first use, from
-  **ModelScope (default)** or **Hugging Face**.
+- `POST /api/rvc/inference`: **RVC voice conversion** — convert an audio clip to
+  the timbre of an installed RVC voice model.
+- Missing MSST models are **downloaded automatically** on first use, from
+  **ModelScope (default)** or **Hugging Face**; RVC voice models are read from
+  `MSST_RVC_MODEL_DIR` (`models/rvc_models` by default).
 - The model storage path is set with the `MSST_MODEL_DIR` environment variable.
 - Dependencies are managed with [uv](https://docs.astral.sh/uv/); inference is
   **GPU-only** by default.
-- Ships with **51** pretrained models from the MSST ecosystem (vocals /
+- Ships with **51** pretrained MSST models from the MSST ecosystem (vocals /
   instrumental, single-stem, multi-stem).
 
 > References: [MSST-WebUI](https://github.com/SUC-DriverOld/MSST-WebUI),
-> [RVCSVC-API-MSST](https://github.com/sdfsfsk/RVCSVC-API-MSST).
+> [RVCSVC-API-MSST](https://github.com/sdfsfsk/RVCSVC-API-MSST),
+> [applio-api-plugin](https://github.com/Deliay/applio-api-plugin),
+> [Applio](https://github.com/IAHispano/Applio).
 
 ---
 
@@ -33,6 +38,11 @@ Submit an audio file plus a model, and get the separated stems back.
 └── src/msst_api/
     ├── main.py                    # FastAPI app and routes
     ├── separator.py               # MSST inference wrapper + LRU model cache
+    ├── rvc_engine.py              # RVC voice discovery + LRU converter cache
+    ├── rvc/                       # vendored RVC inference engine (from Applio)
+    │   ├── infer/                 # VoiceConverter + conversion pipeline
+    │   ├── lib/                   # algorithm, predictors (rmvpe/crepe/fcpe), utils
+    │   └── configs/               # sample-rate presets
     ├── download.py                # ModelScope / HuggingFace / URL downloads
     ├── registry.py                # model catalog access
     ├── audio.py                   # audio decoding / encoding
@@ -158,12 +168,92 @@ with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
 
 ---
 
+## RVC voice conversion
+
+`POST /api/rvc/inference` converts an input clip to the timbre of an installed
+RVC voice model and streams the converted audio back in the response body
+(in-memory, no output files on disk).
+
+RVC voice models live in `MSST_RVC_MODEL_DIR` (default
+`<MSST_MODEL_DIR>/rvc_models`, i.e. `models/rvc_models`). Each voice is a flat
+`<name>.pth` file with an optional sibling `<name>.index` (auto-matched by
+name):
+
+```
+models/rvc_models/
+├── alice.pth
+├── alice.index
+└── bob_v2.pth
+```
+
+Auxiliary assets (the ContentVec embedder and the RMVPE F0 predictor) are
+**downloaded on first use** from the Applio Hugging Face repo into
+`MSST_RVC_ASSET_DIR` (default `<MSST_MODEL_DIR>/rvc_assets`). FCPE is bundled
+inside `torchfcpe`, so `f0_method=fcpe` needs no download.
+
+### 1. List voices
+
+```bash
+curl http://localhost:8000/api/rvc/models
+curl http://localhost:8000/api/rvc/models/alice
+```
+
+### 2. Convert
+
+```bash
+curl -X POST http://localhost:8000/api/rvc/inference \
+  -F "audio=@input.wav" \
+  -F "model=alice" \
+  -F "f0_method=rmvpe" \
+  -F "pitch=0" \
+  -F "output_format=wav" \
+  -o output.wav
+```
+
+The response body is the converted audio; `Content-Type` follows
+`output_format`. `X-RVC-Model` and `X-RVC-Elapsed` headers identify the voice
+and the wall-clock seconds.
+
+### `POST /api/rvc/inference` form fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `audio` | file (required) | Input audio: wav/flac/mp3/m4a, etc. (aliases: `file`, `input`) |
+| `model` | str | Voice id/name from `GET /api/rvc/models` (alias: `model_name`, `pth`) |
+| `index` | str | Index file name; auto-matched from the voice when omitted |
+| `device` | str | Defaults to `MSST_DEVICE` (`cuda:0`) |
+| `pitch` | int | Pitch shift in semitones (default `0`) |
+| `f0_method` | str | `rmvpe` (default) / `crepe` / `crepe-tiny` / `fcpe` |
+| `index_rate` | float | Index blend ratio (default `0.75`) |
+| `volume_envelope` | float | RMS envelope mix (default `1.0`) |
+| `protect` | float | Voiceless-consonant protection (default `0.5`) |
+| `sid` | int | Speaker id (default `0`) |
+| `split_audio` | bool | Split long audio on silence before conversion |
+| `f0_autotune` / `f0_autotune_strength` | bool / float | Autotune the F0 contour |
+| `proposed_pitch` / `proposed_pitch_threshold` | bool / float | Auto pitch to a target frequency |
+| `clean_audio` / `clean_strength` | bool / float | Noise reduction before output |
+| `resample_sr` | int | Resample output to this rate (`0` disables) |
+| `embedder_model` / `embedder_model_custom` | str / str | Feature extractor (default `contentvec`) |
+| `formant_shifting` / `formant_qfrency` / `formant_timbre` | bool / float / float | Formant shifting |
+| `post_process` | bool | Enable the pedalboard effect chain |
+| effect params | | `reverb`, `pitch_shift`, `limiter`, `gain`, `distortion`, `chorus`, `bitcrush`, `clipping`, `compressor`, `delay` plus their parameters |
+| `output_format` | str | `wav` (default) / `mp3` / `flac` / `ogg` / `opus` / `m4a` / `aac` / `aiff` / `ac3` |
+
+> To convert a **separated stem** (e.g. MSST vocals) with RVC, run
+> `/api/msst/inference`, extract `vocals.wav`, then post it to
+> `/api/rvc/inference`.
+
+---
+
 ## Environment variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MSST_MODEL_DIR` | `./models` (`/models` in the image) | **Model storage path** |
 | `MSST_CONFIG_DIR` | bundled config dir | Override the model YAML config directory |
+| `MSST_RVC_MODEL_DIR` | `<MSST_MODEL_DIR>/rvc_models` | **RVC voice model directory** (flat `*.pth` + `*.index`) |
+| `MSST_RVC_ASSET_DIR` | `<MSST_MODEL_DIR>/rvc_assets` | Cache for RVC embedders / F0 predictors |
+| `MSST_RVC_EMBEDDER` | `contentvec` | Default RVC feature extractor |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |
 | `MSST_ALLOW_CPU` | `false` | Allow CPU inference (GPU-only by default) |
@@ -252,12 +342,15 @@ uv run pytest
 
 ## Adding custom models
 
-- **Catalog approach**: put a YAML config named after the weights in
+- **MSST catalog approach**: put a YAML config named after the weights in
   `src/msst_api/data/configs/<category>/` and add an entry to `registry.json`
   (or regenerate it with `scripts/build_registry.py`).
-- **Ad-hoc approach**: pass `model_type` + `config`/`config_url` +
+- **MSST ad-hoc approach**: pass `model_type` + `config`/`config_url` +
   `checkpoint`/`checkpoint_url` directly in the inference request; no catalog
   changes needed.
+- **RVC voices**: just drop a `<name>.pth` (and optional `<name>.index`) into
+  `MSST_RVC_MODEL_DIR` (`models/rvc_models`). No registry needed; the service
+  rescans the directory on every request.
 
 ---
 

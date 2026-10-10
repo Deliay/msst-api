@@ -49,6 +49,13 @@ def _env_path(name: str, default: Path) -> Path:
     return Path(raw).expanduser()
 
 
+def _env_path_opt(name: str) -> Path | None:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return None
+    return Path(raw).expanduser()
+
+
 @dataclass(slots=True)
 class Settings:
     """All tunables for the service, resolved from the environment."""
@@ -62,6 +69,22 @@ class Settings:
     #: the configs bundled inside the package.
     config_dir: Path = field(
         default_factory=lambda: _env_path("MSST_CONFIG_DIR", BUNDLED_CONFIG_DIR)
+    )
+
+    # --- RVC (voice conversion) -------------------------------------------
+    #: Directory holding RVC voice models (``*.pth`` + optional ``*.index``).
+    #: Defaults to ``<model_dir>/rvc_models`` (``MSST_RVC_MODEL_DIR``).
+    rvc_model_dir: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_RVC_MODEL_DIR")
+    )
+    #: Directory caching auxiliary RVC assets (embedders, predictors).
+    #: Defaults to ``<model_dir>/rvc_assets`` (``MSST_RVC_ASSET_DIR``).
+    rvc_asset_dir: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_RVC_ASSET_DIR")
+    )
+    #: Default feature extractor for RVC conversion (``MSST_RVC_EMBEDDER``).
+    rvc_embedder: str = field(
+        default_factory=lambda: os.environ.get("MSST_RVC_EMBEDDER", "contentvec").strip().lower()
     )
 
     # --- Server ------------------------------------------------------------
@@ -145,6 +168,12 @@ class Settings:
         self.model_dir = Path(self.model_dir).expanduser().resolve()
         self.config_dir = Path(self.config_dir).expanduser().resolve()
         self.temp_dir = Path(self.temp_dir).expanduser().resolve()
+        if self.rvc_model_dir is None:
+            self.rvc_model_dir = self.model_dir / "rvc_models"
+        if self.rvc_asset_dir is None:
+            self.rvc_asset_dir = self.model_dir / "rvc_assets"
+        self.rvc_model_dir = Path(self.rvc_model_dir).expanduser().resolve()
+        self.rvc_asset_dir = Path(self.rvc_asset_dir).expanduser().resolve()
         if self.download_backend not in {"modelscope", "huggingface", "auto"}:
             self.download_backend = "auto"
 

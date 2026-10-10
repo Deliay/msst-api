@@ -27,6 +27,16 @@ dependencies = [
     # Audio IO.
     "soundfile>=0.12",
     "numpy>=1.23",
+    "librosa>=0.10",
+    "scipy>=1.10",
+    "soxr>=0.3",
+    # RVC (Retrieval-based Voice Conversion) engine, vendored from Applio.
+    "faiss-cpu>=1.8",
+    "torchcrepe>=0.0.24",
+    "torchfcpe>=0.0.4",
+    "noisereduce>=3.0",
+    "pedalboard>=0.9",
+    "stftpitchshift>=1.5",
 ]
 
 [project.scripts]

@@ -6,13 +6,17 @@
 的 GPU 推理 HTTP 服务。提交一段音频和一个模型，返回分离后的各个音轨。
 
 - `POST /api/msst/inference`：表单推理，支持指定 MSST 模型及其推理参数。
-- 缺失模型在首次推理时**自动下载**，支持 **ModelScope（默认）** 与 **Hugging Face**。
+- `POST /api/rvc/inference`：**RVC 声音转换**——把一段音频转换成已安装 RVC 音色模型的音色。
+- 缺失的 MSST 模型在首次推理时**自动下载**，支持 **ModelScope（默认）** 与 **Hugging Face**；
+  RVC 音色模型从 `MSST_RVC_MODEL_DIR`（默认 `models/rvc_models`）读取。
 - 模型存放路径通过环境变量 `MSST_MODEL_DIR` 指定。
 - 使用 [uv](https://docs.astral.sh/uv/) 管理依赖，默认**仅支持 GPU 推理**。
 - 内置 51 个来自 MSST 生态的预训练模型（人声/伴奏、单音轨、多音轨）。
 
 > 参考实现：[MSST-WebUI](https://github.com/SUC-DriverOld/MSST-WebUI)、
-> [RVCSVC-API-MSST](https://github.com/sdfsfsk/RVCSVC-API-MSST)。
+> [RVCSVC-API-MSST](https://github.com/sdfsfsk/RVCSVC-API-MSST)、
+> [applio-api-plugin](https://github.com/Deliay/applio-api-plugin)、
+> [Applio](https://github.com/IAHispano/Applio)。
 
 ---
 
@@ -28,6 +32,11 @@
 └── src/msst_api/
     ├── main.py                    # FastAPI 应用与路由
     ├── separator.py               # MSST 推理封装 + 模型 LRU 缓存
+    ├── rvc_engine.py              # RVC 音色发现 + 转换器 LRU 缓存
+    ├── rvc/                       # 内置 RVC 推理引擎（移植自 Applio）
+    │   ├── infer/                 # VoiceConverter 与转换流程
+    │   ├── lib/                   # 网络结构、F0 预测器（rmvpe/crepe/fcpe）、工具
+    │   └── configs/               # 采样率预设
     ├── download.py                # ModelScope / HuggingFace / URL 下载
     ├── registry.py                # 模型目录读取
     ├── audio.py                   # 音频解码/编码
@@ -152,12 +161,87 @@ with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
 
 ---
 
+## RVC 声音转换
+
+`POST /api/rvc/inference` 会把输入音频转换成已安装 RVC 音色模型的音色，并直接在
+响应体中返回转换后的音频（全程内存处理，不落盘）。
+
+RVC 音色模型放在 `MSST_RVC_MODEL_DIR`（默认 `<MSST_MODEL_DIR>/rvc_models`，即
+`models/rvc_models`）。每个音色是一个扁平的 `<name>.pth` 文件，可搭配同名的
+`<name>.index`（按名称自动匹配）：
+
+```
+models/rvc_models/
+├── alice.pth
+├── alice.index
+└── bob_v2.pth
+```
+
+辅助资源（ContentVec 特征提取器与 RMVPE 音高预测器）会在**首次使用时自动下载**
+到 `MSST_RVC_ASSET_DIR`（默认 `<MSST_MODEL_DIR>/rvc_assets`）。FCPE 已内置于
+`torchfcpe`，因此 `f0_method=fcpe` 无需额外下载。
+
+### 1. 列出音色
+
+```bash
+curl http://localhost:8000/api/rvc/models
+curl http://localhost:8000/api/rvc/models/alice
+```
+
+### 2. 转换
+
+```bash
+curl -X POST http://localhost:8000/api/rvc/inference \
+  -F "audio=@input.wav" \
+  -F "model=alice" \
+  -F "f0_method=rmvpe" \
+  -F "pitch=0" \
+  -F "output_format=wav" \
+  -o output.wav
+```
+
+响应体即为转换后的音频，`Content-Type` 随 `output_format` 变化；响应头
+`X-RVC-Model`、`X-RVC-Elapsed` 分别标识音色与耗时。
+
+### `POST /api/rvc/inference` 表单字段
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `audio` | file（必填） | 输入音频，支持 wav/flac/mp3/m4a 等（别名 `file`、`input`） |
+| `model` | str | 音色 id/名称（来自 `GET /api/rvc/models`，别名 `model_name`、`pth`） |
+| `index` | str | 索引文件名；省略时按音色自动匹配 |
+| `device` | str | 默认取 `MSST_DEVICE`（`cuda:0`） |
+| `pitch` | int | 变调半音数（默认 `0`） |
+| `f0_method` | str | `rmvpe`（默认）/ `crepe` / `crepe-tiny` / `fcpe` |
+| `index_rate` | float | 索引混合比例（默认 `0.75`） |
+| `volume_envelope` | float | 音量包络混合（默认 `1.0`） |
+| `protect` | float | 清辅音保护（默认 `0.5`） |
+| `sid` | int | 说话人 id（默认 `0`） |
+| `split_audio` | bool | 是否按静音切分长音频 |
+| `f0_autotune` / `f0_autotune_strength` | bool / float | 电音修音 |
+| `proposed_pitch` / `proposed_pitch_threshold` | bool / float | 自动向目标频率变调 |
+| `clean_audio` / `clean_strength` | bool / float | 输出前降噪 |
+| `resample_sr` | int | 重采样到指定采样率（`0` 表示关闭） |
+| `embedder_model` / `embedder_model_custom` | str / str | 特征提取器（默认 `contentvec`） |
+| `formant_shifting` / `formant_qfrency` / `formant_timbre` | bool / float / float | 共振峰偏移 |
+| `post_process` | bool | 启用 pedalboard 效果链 |
+| 效果参数 | | `reverb`、`pitch_shift`、`limiter`、`gain`、`distortion`、`chorus`、`bitcrush`、`clipping`、`compressor`、`delay` 及各自参数 |
+| `output_format` | str | `wav`（默认）/ `mp3` / `flac` / `ogg` / `opus` / `m4a` / `aac` / `aiff` / `ac3` |
+
+> 若想对**分离出的音轨**（如 MSST 的 vocals）做 RVC，先调用
+> `/api/msst/inference`，取出 `vocals.wav`，再提交到 `/api/rvc/inference`。
+
+---
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `MSST_MODEL_DIR` | `./models`（镜像内 `/models`） | **模型存放路径** |
 | `MSST_CONFIG_DIR` | 内置配置目录 | 覆盖模型 YAML 配置目录 |
+| `MSST_RVC_MODEL_DIR` | `<MSST_MODEL_DIR>/rvc_models` | **RVC 音色模型目录**（扁平 `*.pth` + `*.index`） |
+| `MSST_RVC_ASSET_DIR` | `<MSST_MODEL_DIR>/rvc_assets` | RVC 特征提取器 / F0 预测器缓存 |
+| `MSST_RVC_EMBEDDER` | `contentvec` | 默认 RVC 特征提取器 |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |
 | `MSST_ALLOW_CPU` | `false` | 是否允许 CPU 推理（默认仅 GPU） |
@@ -234,11 +318,14 @@ uv run pytest
 
 ## 添加自定义模型
 
-- **目录方式**：在 `src/msst_api/data/configs/<category>/` 放入与权重同名的
+- **MSST 目录方式**：在 `src/msst_api/data/configs/<category>/` 放入与权重同名的
   YAML 配置，并在 `registry.json` 增加条目（或使用
   `scripts/build_registry.py` 重新生成）。
-- **临时方式**：推理请求中直接提供 `model_type` + `config`/`config_url`
+- **MSST 临时方式**：推理请求中直接提供 `model_type` + `config`/`config_url`
   + `checkpoint`/`checkpoint_url`，无需修改目录。
+- **RVC 音色**：直接把 `<name>.pth`（及可选的 `<name>.index`）放进
+  `MSST_RVC_MODEL_DIR`（`models/rvc_models`）即可，无需注册表；服务会在每次
+  请求时重新扫描该目录。
 
 ---
 

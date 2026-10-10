@@ -13,21 +13,39 @@ from dataclasses import replace
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from .audio import (
+    RVC_OUTPUT_FORMATS,
     SUPPORTED_OUTPUT_FORMATS,
     build_zip,
     decode_audio,
+    decode_audio_mono,
     encode_audio,
+    encode_audio_dynamic,
     save_upload,
 )
 from .config import Settings, get_settings
 from .download import DownloadError, download_model
 from .registry import ModelNotFoundError, get_registry
-from .schemas import HealthResponse, InferenceMetadata, ModelInfo, ModelListResponse
-from .separator import InferenceError, ModelManager, ModelSpec
+from .rvc_engine import (
+    RVCError,
+    RVCManager,
+    RVCParams,
+    RVCVoiceNotFoundError,
+    RVCVoiceSpec,
+)
+from .schemas import (
+    HealthResponse,
+    InferenceMetadata,
+    ModelInfo,
+    ModelListResponse,
+    RVCVoiceInfo,
+    RVCVoiceListResponse,
+)
+from .separator import InferenceError, ModelManager, ModelSpec, resolve_device
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +54,7 @@ logging.basicConfig(
 logger = logging.getLogger("msst_api")
 
 TAG = "MSST"
+RVC_TAG = "RVC"
 
 
 @asynccontextmanager
@@ -43,13 +62,22 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.temp_dir.mkdir(parents=True, exist_ok=True)
     settings.model_dir.mkdir(parents=True, exist_ok=True)
+    settings.rvc_model_dir.mkdir(parents=True, exist_ok=True)
+    settings.rvc_asset_dir.mkdir(parents=True, exist_ok=True)
     app.state.settings = settings
     app.state.manager = ModelManager(settings)
-    logger.info("MSST API ready. model_dir=%s device=%s", settings.model_dir, settings.device)
+    app.state.rvc_manager = RVCManager(settings)
+    logger.info(
+        "MSST API ready. model_dir=%s rvc_model_dir=%s device=%s",
+        settings.model_dir,
+        settings.rvc_model_dir,
+        settings.device,
+    )
     try:
         yield
     finally:
         app.state.manager.unload()
+        app.state.rvc_manager.unload()
 
 
 app = FastAPI(
@@ -68,6 +96,10 @@ def _manager() -> ModelManager:
     return app.state.manager
 
 
+def _rvc_manager() -> RVCManager:
+    return app.state.rvc_manager
+
+
 def _settings() -> Settings:
     return app.state.settings
 
@@ -78,6 +110,16 @@ def _settings() -> Settings:
 @app.exception_handler(ModelNotFoundError)
 async def _model_not_found(request, exc: ModelNotFoundError):  # noqa: ANN001
     return JSONResponse(status_code=404, content={"detail": f"Unknown model: {exc}"})
+
+
+@app.exception_handler(RVCVoiceNotFoundError)
+async def _rvc_voice_not_found(request, exc: RVCVoiceNotFoundError):  # noqa: ANN001
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(RVCError)
+async def _rvc_error(request, exc: RVCError):  # noqa: ANN001
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 @app.exception_handler(DownloadError)
@@ -95,6 +137,8 @@ def root() -> dict:
         "docs": "/docs",
         "inference": "POST /api/msst/inference",
         "models": "GET /api/msst/models",
+        "rvc_inference": "POST /api/rvc/inference",
+        "rvc_models": "GET /api/rvc/models",
     }
 
 
@@ -109,6 +153,8 @@ def health() -> HealthResponse:
         model_dir=str(settings.model_dir),
         download_backend=settings.download_backend,
         loaded_models=manager.loaded,
+        rvc_model_dir=str(settings.rvc_model_dir),
+        rvc_loaded_models=_rvc_manager().loaded,
     )
 
 
@@ -355,6 +401,251 @@ def inference(
         archive = build_zip(files)
         headers = {"Content-Disposition": 'attachment; filename="stems.zip"'}
         return Response(content=archive, media_type="application/zip", headers=headers)
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# RVC (voice conversion)
+# ---------------------------------------------------------------------------
+_RVC_TRUE = {"1", "true", "yes", "on", "y", "t"}
+
+#: Pedalboard effect toggles + parameter defaults (used when ``post_process``).
+_RVC_EFFECT_FLAGS = (
+    "reverb",
+    "pitch_shift",
+    "limiter",
+    "gain",
+    "distortion",
+    "chorus",
+    "bitcrush",
+    "clipping",
+    "compressor",
+    "delay",
+)
+_RVC_EFFECT_FLOATS = {
+    "reverb_room_size": 0.5,
+    "reverb_damping": 0.5,
+    "reverb_wet_level": 0.33,
+    "reverb_dry_level": 0.4,
+    "reverb_width": 1.0,
+    "reverb_freeze_mode": 0.0,
+    "pitch_shift_semitones": 0.0,
+    "limiter_threshold": -6.0,
+    "limiter_release": 0.05,
+    "gain_db": 0.0,
+    "distortion_gain": 25.0,
+    "chorus_rate": 1.0,
+    "chorus_depth": 0.25,
+    "chorus_delay": 7.0,
+    "chorus_feedback": 0.0,
+    "chorus_mix": 0.5,
+    "clipping_threshold": 0.0,
+    "compressor_threshold": 0.0,
+    "compressor_ratio": 1.0,
+    "compressor_attack": 1.0,
+    "compressor_release": 100.0,
+    "delay_seconds": 0.5,
+    "delay_feedback": 0.0,
+    "delay_mix": 0.5,
+}
+
+_RVC_F0_METHODS = {"rmvpe", "crepe", "crepe-tiny", "fcpe"}
+
+
+def _build_rvc_params(form) -> RVCParams:  # noqa: ANN001 - Starlette FormData
+    def _str(key: str, default: str = "") -> str:
+        value = form.get(key)
+        return default if value is None else str(value).strip()
+
+    def _int(key: str, default: int) -> int:
+        value = form.get(key)
+        try:
+            return int(float(value)) if value not in (None, "") else default
+        except (TypeError, ValueError):
+            return default
+
+    def _float(key: str, default: float) -> float:
+        value = form.get(key)
+        try:
+            return float(value) if value not in (None, "") else default
+        except (TypeError, ValueError):
+            return default
+
+    def _bool(key: str, default: bool = False) -> bool:
+        value = form.get(key)
+        if value in (None, ""):
+            return default
+        return str(value).strip().lower() in _RVC_TRUE
+
+    effects: dict = {}
+    for flag in _RVC_EFFECT_FLAGS:
+        effects[flag] = _bool(flag)
+    for name, default in _RVC_EFFECT_FLOATS.items():
+        effects[name] = _float(name, default)
+    effects["bitcrush_bit_depth"] = _int("bitcrush_bit_depth", 8)
+
+    return RVCParams(
+        pitch=_int("pitch", 0),
+        f0_method=_str("f0_method", "rmvpe").lower() or "rmvpe",
+        index_rate=_float("index_rate", 0.75),
+        volume_envelope=_float("volume_envelope", 1.0),
+        protect=_float("protect", 0.5),
+        split_audio=_bool("split_audio"),
+        f0_autotune=_bool("f0_autotune"),
+        f0_autotune_strength=_float("f0_autotune_strength", 1.0),
+        clean_audio=_bool("clean_audio"),
+        clean_strength=_float("clean_strength", 0.5),
+        resample_sr=_int("resample_sr", 0),
+        sid=_int("sid", 0),
+        proposed_pitch=_bool("proposed_pitch"),
+        proposed_pitch_threshold=_float("proposed_pitch_threshold", 155.0),
+        post_process=_bool("post_process"),
+        effects=effects,
+    )
+
+
+@app.get("/api/rvc/models", response_model=RVCVoiceListResponse, tags=[RVC_TAG])
+def list_rvc_models() -> RVCVoiceListResponse:
+    voices = [
+        RVCVoiceInfo(**voice.to_public_dict())
+        for voice in _rvc_manager().library.all()
+    ]
+    return RVCVoiceListResponse(total=len(voices), voices=voices)
+
+
+@app.get("/api/rvc/models/{voice_id}", response_model=RVCVoiceInfo, tags=[RVC_TAG])
+def get_rvc_model(voice_id: str) -> RVCVoiceInfo:
+    voice = _rvc_manager().library.get(voice_id)
+    return RVCVoiceInfo(**voice.to_public_dict())
+
+
+@app.post("/api/rvc/inference", tags=[RVC_TAG])
+async def rvc_inference(request: Request):
+    """Convert ``audio`` to the timbre of ``model`` and stream the result back."""
+
+    settings = _settings()
+    started = time.time()
+
+    form = await request.form()
+    upload = form.get("audio") or form.get("file") or form.get("input")
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(
+            status_code=400, detail="multipart field 'audio' (file) is required."
+        )
+
+    model_value = form.get("model") or form.get("model_name") or form.get("pth")
+    if not model_value:
+        raise HTTPException(status_code=400, detail="Field 'model' is required.")
+
+    output_format = (str(form.get("output_format", "wav")).strip().lower().lstrip(".")) or "wav"
+    if output_format not in RVC_OUTPUT_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output_format: {output_format}. "
+            f"Expected one of {sorted(RVC_OUTPUT_FORMATS)}",
+        )
+
+    library = _rvc_manager().library
+    voice = library.get(str(model_value))
+
+    index_value = form.get("index") or form.get("index_path")
+    if index_value:
+        index_path = library.resolve_index(str(index_value))
+    else:
+        index_path = voice.index_path
+
+    params = _build_rvc_params(form)
+    if params.f0_method not in _RVC_F0_METHODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid f0_method: {params.f0_method}. "
+            f"Expected one of {sorted(_RVC_F0_METHODS)}",
+        )
+
+    embedder = (str(form.get("embedder_model") or settings.rvc_embedder).strip().lower()
+                or settings.rvc_embedder)
+    embedder_custom = str(form.get("embedder_model_custom") or "").strip() or None
+    try:
+        device = resolve_device(
+            str(form.get("device") or settings.device).strip() or settings.device, settings
+        )
+    except InferenceError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    spec = RVCVoiceSpec(
+        model_path=voice.path,
+        index_path=index_path,
+        device=device,
+        embedder=embedder,
+        embedder_custom=embedder_custom,
+    )
+
+    audio_bytes = await upload.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+    max_bytes = int(settings.max_upload_mb * 1024 * 1024)
+    if len(audio_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Upload exceeds MSST_MAX_UPLOAD_MB ({settings.max_upload_mb} MB)",
+        )
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="rvc-", dir=str(settings.temp_dir)))
+    try:
+        upload_path = save_upload(
+            audio_bytes, Path(upload.filename or "input.wav").suffix or ".wav", temp_dir
+        )
+        try:
+            mix = decode_audio_mono(upload_path, 16000)
+        except Exception as error:  # noqa: BLE001
+            raise HTTPException(
+                status_code=400, detail=f"Cannot decode audio: {error}"
+            ) from error
+
+        formant_shifting = str(form.get("formant_shifting", "")).strip().lower() in _RVC_TRUE
+        if formant_shifting:
+            from .rvc.lib.utils import load_audio_infer
+
+            def _float(key: str, default: float) -> float:
+                value = form.get(key)
+                try:
+                    return float(value) if value not in (None, "") else default
+                except (TypeError, ValueError):
+                    return default
+
+            mix = load_audio_infer(
+                mix,
+                16000,
+                formant_shifting=True,
+                formant_qfrency=_float("formant_qfrency", 1.0),
+                formant_timbre=_float("formant_timbre", 1.0),
+            )
+
+        try:
+            converted, sample_rate = await run_in_threadpool(
+                _rvc_manager().convert, spec, mix, params
+            )
+        except RVCVoiceNotFoundError:
+            raise
+        except RVCError:
+            raise
+        except Exception as error:  # noqa: BLE001
+            logger.exception("RVC inference failed")
+            raise HTTPException(
+                status_code=500, detail=f"RVC inference failed: {error}"
+            ) from error
+
+        content, media_type = encode_audio_dynamic(converted, sample_rate, output_format)
+        headers = {
+            "Content-Disposition": f'inline; filename="output.{output_format}"',
+            "X-RVC-Model": voice.name,
+            "X-RVC-Sample-Rate": str(sample_rate),
+            "X-RVC-F0-Method": params.f0_method,
+            "X-RVC-Elapsed": f"{time.time() - started:.3f}",
+        }
+        return Response(content=content, media_type=media_type, headers=headers)
     finally:
         if not settings.keep_temp:
             shutil.rmtree(temp_dir, ignore_errors=True)
