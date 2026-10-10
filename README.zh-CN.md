@@ -245,8 +245,8 @@ curl -X POST http://localhost:8000/api/rvc/inference \
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |
 | `MSST_ALLOW_CPU` | `false` | 是否允许 CPU 推理（默认仅 GPU） |
-| `MSST_MAX_LOADED_MODELS` | `1` | 常驻显存的模型数量（LRU 淘汰） |
-| `MSST_MAX_CONCURRENCY` | `1` | 并发推理数 |
+| `MSST_MAX_LOADED_MODELS` | `1` | 常驻显存的模型数量（MSST 与 RVC **共享** LRU 淘汰） |
+| `MSST_MAX_CONCURRENCY` | `1` | 并发推理数（MSST 与 RVC **共享**） |
 | `MSST_MAX_UPLOAD_MB` | `512` | 上传大小上限 |
 | `MSST_TEMP_DIR` | `/tmp/msst-api` | 临时目录 |
 | `MSST_DOWNLOAD_BACKEND` | `modelscope` | 下载后端偏好：`modelscope` / `huggingface` / `auto` |

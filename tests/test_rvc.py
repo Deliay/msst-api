@@ -150,3 +150,9 @@ def test_health_reports_rvc_dir(rvc_client):
     health = rvc_client.get("/health")
     assert health.status_code == 200
     assert health.json()["rvc_model_dir"]
+
+
+def test_msst_and_rvc_share_resource_limits(rvc_client):
+    # MSST_MAX_LOADED_MODELS / MSST_MAX_CONCURRENCY are global budgets.
+    state = rvc_client.app.state
+    assert state.manager._cache is state.rvc_manager._cache

@@ -14,7 +14,6 @@ from __future__ import annotations
 import gc
 import logging
 import threading
-from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -27,6 +26,7 @@ from msst.utils.model_utils import apply_tta, bigshifts_wrapper, prefer_target_i
 from msst.utils.settings import build_model_from_config, get_model_from_config
 
 from .config import Settings, get_settings
+from .resources import SharedModelCache
 
 logger = logging.getLogger("msst_api.separator")
 
@@ -411,44 +411,45 @@ class MSSeparator:
 
 
 class ModelManager:
-    """Thread-safe LRU cache of loaded :class:`MSSeparator` instances."""
+    """Thread-safe LRU cache of loaded :class:`MSSeparator` instances.
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    The cache and inference semaphore can be shared with the RVC manager (see
+    :class:`msst_api.resources.SharedModelCache`) so ``MSST_MAX_LOADED_MODELS``
+    and ``MSST_MAX_CONCURRENCY`` apply across both subsystems.
+    """
+
+    def __init__(self, settings: Settings | None = None, cache: SharedModelCache | None = None) -> None:
         self.settings = settings or get_settings()
-        self._cache: "OrderedDict[tuple, MSSeparator]" = OrderedDict()
+        self._cache = cache or SharedModelCache(
+            self.settings.max_loaded_models, self.settings.max_concurrency
+        )
         self._lock = threading.RLock()
-        self._semaphore = threading.Semaphore(max(1, self.settings.max_concurrency))
 
     def get(self, spec: ModelSpec) -> MSSeparator:
+        cached = self._cache.get(spec.key)
+        if cached is not None:
+            return cached
         with self._lock:
             cached = self._cache.get(spec.key)
             if cached is not None:
-                self._cache.move_to_end(spec.key)
                 return cached
             separator = MSSeparator(spec, self.settings)
-            self._cache[spec.key] = separator
-            self._evict_locked()
-            return separator
+            return self._cache.put(
+                spec.key,
+                separator,
+                namespace="msst",
+                label=spec.checkpoint_path.name,
+                closer=lambda obj: obj.close(),
+            )
 
     def separate(self, spec: ModelSpec, mix: np.ndarray) -> dict[str, np.ndarray]:
         separator = self.get(spec)
-        with self._semaphore:
+        with self._cache.inference_slot():
             return separator.separate(mix)
 
-    def _evict_locked(self) -> None:
-        limit = max(1, self.settings.max_loaded_models)
-        while len(self._cache) > limit:
-            _, evicted = self._cache.popitem(last=False)
-            logger.info("Evicting cached model to respect MSST_MAX_LOADED_MODELS")
-            evicted.close()
-
     def unload(self) -> None:
-        with self._lock:
-            for separator in self._cache.values():
-                separator.close()
-            self._cache.clear()
+        self._cache.clear("msst")
 
     @property
     def loaded(self) -> list[str]:
-        with self._lock:
-            return [sep.spec.checkpoint_path.name for sep in self._cache.values()]
+        return self._cache.loaded("msst")

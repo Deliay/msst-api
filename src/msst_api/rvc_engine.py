@@ -14,18 +14,16 @@ works even before the optional engine dependencies are installed.
 
 from __future__ import annotations
 
-import gc
 import logging
 import threading
-from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import torch
 
 from .config import Settings, get_settings
+from .resources import SharedModelCache
 
 logger = logging.getLogger("msst_api.rvc")
 
@@ -204,17 +202,25 @@ class RVCParams:
 # Manager
 # ---------------------------------------------------------------------------
 class RVCManager:
-    """Thread-safe LRU cache of loaded :class:`VoiceConverter` instances."""
+    """Thread-safe LRU cache of loaded :class:`VoiceConverter` instances.
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    Uses the same :class:`~msst_api.resources.SharedModelCache` as the MSST
+    manager so ``MSST_MAX_LOADED_MODELS`` and ``MSST_MAX_CONCURRENCY`` are
+    global budgets across both subsystems.
+    """
+
+    def __init__(
+        self, settings: Settings | None = None, cache: SharedModelCache | None = None
+    ) -> None:
         self.settings = settings or get_settings()
         from .rvc.lib.assets import set_assets_dir
 
         set_assets_dir(self.settings.rvc_asset_dir)
         self.library = RVCVoiceLibrary(self.settings.rvc_model_dir)
-        self._cache: "OrderedDict[tuple, object]" = OrderedDict()
+        self._cache = cache or SharedModelCache(
+            self.settings.max_loaded_models, self.settings.max_concurrency
+        )
         self._lock = threading.RLock()
-        self._semaphore = threading.Semaphore(max(1, self.settings.max_concurrency))
 
     # -- loading -----------------------------------------------------------
     def _build(self, spec: RVCVoiceSpec):
@@ -242,22 +248,28 @@ class RVCManager:
         return converter
 
     def get(self, spec: RVCVoiceSpec):
+        cached = self._cache.get(spec.key)
+        if cached is not None:
+            return cached
         with self._lock:
             cached = self._cache.get(spec.key)
             if cached is not None:
-                self._cache.move_to_end(spec.key)
                 return cached
             converter = self._build(spec)
-            self._cache[spec.key] = converter
-            self._evict_locked()
-            return converter
+            return self._cache.put(
+                spec.key,
+                converter,
+                namespace="rvc",
+                label=spec.model_path.name,
+                closer=lambda obj: obj.cleanup_model(),
+            )
 
     # -- inference ---------------------------------------------------------
     def convert(
         self, spec: RVCVoiceSpec, audio: np.ndarray, params: RVCParams
     ) -> tuple[np.ndarray, int]:
         converter = self.get(spec)
-        with self._semaphore:
+        with self._cache.inference_slot():
             return converter.convert(
                 audio,
                 model_path=str(spec.model_path),
@@ -283,27 +295,9 @@ class RVCManager:
             )
 
     # -- lifecycle ---------------------------------------------------------
-    def _evict_locked(self) -> None:
-        limit = max(1, self.settings.max_loaded_models)
-        while len(self._cache) > limit:
-            _, evicted = self._cache.popitem(last=False)
-            logger.info("Evicting cached RVC voice to respect MSST_MAX_LOADED_MODELS")
-            close = getattr(evicted, "cleanup_model", None)
-            if callable(close):
-                close()
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
     def unload(self) -> None:
-        with self._lock:
-            for converter in self._cache.values():
-                close = getattr(converter, "cleanup_model", None)
-                if callable(close):
-                    close()
-            self._cache.clear()
+        self._cache.clear("rvc")
 
     @property
     def loaded(self) -> list[str]:
-        with self._lock:
-            return [Path(key[0]).name for key in self._cache]
+        return self._cache.loaded("rvc")

@@ -257,8 +257,8 @@ and the wall-clock seconds.
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |
 | `MSST_ALLOW_CPU` | `false` | Allow CPU inference (GPU-only by default) |
-| `MSST_MAX_LOADED_MODELS` | `1` | Models kept resident (LRU eviction) |
-| `MSST_MAX_CONCURRENCY` | `1` | Concurrent inference requests |
+| `MSST_MAX_LOADED_MODELS` | `1` | Models kept resident across MSST **and** RVC (shared LRU eviction) |
+| `MSST_MAX_CONCURRENCY` | `1` | Concurrent inference requests across MSST **and** RVC (shared) |
 | `MSST_MAX_UPLOAD_MB` | `512` | Max upload size |
 | `MSST_TEMP_DIR` | `/tmp/msst-api` | Temporary directory |
 | `MSST_DOWNLOAD_BACKEND` | `modelscope` | Backend preference: `modelscope` / `huggingface` / `auto` |

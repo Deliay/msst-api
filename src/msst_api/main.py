@@ -30,6 +30,7 @@ from .audio import (
 from .config import Settings, get_settings
 from .download import DownloadError, download_model
 from .registry import ModelNotFoundError, get_registry
+from .resources import SharedModelCache
 from .rvc_engine import (
     RVCError,
     RVCManager,
@@ -65,13 +66,21 @@ async def lifespan(app: FastAPI):
     settings.rvc_model_dir.mkdir(parents=True, exist_ok=True)
     settings.rvc_asset_dir.mkdir(parents=True, exist_ok=True)
     app.state.settings = settings
-    app.state.manager = ModelManager(settings)
-    app.state.rvc_manager = RVCManager(settings)
+    # One governor shared by MSST and RVC so MSST_MAX_LOADED_MODELS and
+    # MSST_MAX_CONCURRENCY are global budgets across both subsystems.
+    shared_cache = SharedModelCache(
+        settings.max_loaded_models, settings.max_concurrency
+    )
+    app.state.manager = ModelManager(settings, cache=shared_cache)
+    app.state.rvc_manager = RVCManager(settings, cache=shared_cache)
     logger.info(
-        "MSST API ready. model_dir=%s rvc_model_dir=%s device=%s",
+        "MSST API ready. model_dir=%s rvc_model_dir=%s device=%s "
+        "max_loaded_models=%s max_concurrency=%s",
         settings.model_dir,
         settings.rvc_model_dir,
         settings.device,
+        settings.max_loaded_models,
+        settings.max_concurrency,
     )
     try:
         yield
