@@ -354,6 +354,12 @@ estimator is the other consumer, so chunks are capped at
 ~5.5 GB with `chinese_asr_engine=qwen` (Qwen3-ASR-1.7B, bf16); use
 `chinese_asr_engine=pinyin` there for more headroom.
 
+**Language.** Omit `language` (or pass `auto`) and the pipeline samples a short
+window with Qwen3-ASR to detect `zh` / `en` / `ja` / `yue` before choosing the
+ASR, aligner and G2P chain (`MSST_V2M_LANGUAGE_DETECT_SEC`,
+`MSST_V2M_DEFAULT_LANGUAGE`). Pass `language=zh` explicitly to skip detection
+(e.g. when using `chinese_asr_engine=pinyin` and you don't want Qwen loaded).
+
 ```bash
 curl -X POST http://localhost:8000/api/v2m/inference \
   -F "audio=@vocal.wav" \
@@ -426,6 +432,8 @@ Each pipeline stage is also exposed on its own:
 | `MSST_V2M_RMVPE_BACKEND` | `rvc` | Pitch-curve backend: `rvc` (reuse RVC RMVPE) / `onnx` |
 | `MSST_V2M_TIFA_OPSET` | `18` | ONNX opset (18–20) for the TiFA export |
 | `MSST_V2M_MAX_CHUNK_SEC` | `30` | Cap on each GAME chunk; bounds estimator VRAM (0 = off) |
+| `MSST_V2M_LANGUAGE_DETECT_SEC` | `30` | Audio sampled by Qwen3-ASR to auto-detect the language |
+| `MSST_V2M_DEFAULT_LANGUAGE` | `zh` | Fallback when detection is inconclusive / unsupported |
 | `MSST_GITHUB_PROXY` | `https://ghfast.top/` | Prefix proxy for GitHub release downloads (empty = direct) |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |

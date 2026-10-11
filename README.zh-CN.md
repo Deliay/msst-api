@@ -296,6 +296,11 @@ GAME、HubertFA、kashi-g2p 从其 GitHub Release 资产解压（经 `MSST_GITHU
 `MSST_V2M_MAX_CHUNK_SEC`（默认 30 秒）。在空闲的 8 GB 卡上，`chinese_asr_engine=qwen`
 （Qwen3-ASR-1.7B，bf16）时峰值约 5.5 GB；可用 `chinese_asr_engine=pinyin` 获得更大余量。
 
+**语言识别。** 不传 `language`（或传 `auto`）时，流程会用 Qwen3-ASR 采样一小段音频，自动识别
+`zh` / `en` / `ja` / `yue` 后再选择 ASR、对齐器与 G2P 链（`MSST_V2M_LANGUAGE_DETECT_SEC`、
+`MSST_V2M_DEFAULT_LANGUAGE`）。若想跳过识别（例如使用 `chinese_asr_engine=pinyin` 且不想加载
+Qwen），请显式传 `language=zh`。
+
 ```bash
 curl -X POST http://localhost:8000/api/v2m/inference \
   -F "audio=@vocal.wav" \
@@ -347,6 +352,8 @@ curl -X POST http://localhost:8000/api/v2m/inference \
 | `MSST_V2M_RMVPE_BACKEND` | `rvc` | 音高曲线后端：`rvc`（复用 RVC RMVPE）/ `onnx` |
 | `MSST_V2M_TIFA_OPSET` | `18` | TiFA 导出的 ONNX opset（18–20） |
 | `MSST_V2M_MAX_CHUNK_SEC` | `30` | 每个 GAME 分块上限（秒），约束显存（0 关闭） |
+| `MSST_V2M_LANGUAGE_DETECT_SEC` | `30` | Qwen3-ASR 自动识别语言时采样的音频秒数 |
+| `MSST_V2M_DEFAULT_LANGUAGE` | `zh` | 识别不确定/不支持时的回退语言 |
 | `MSST_GITHUB_PROXY` | `https://ghfast.top/` | GitHub 发布资产下载的前缀代理（留空则直连） |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |

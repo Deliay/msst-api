@@ -35,7 +35,7 @@ SUPPORTED_OUTPUT_FORMATS = {
 class V2MRequest:
     """Validated inputs for one pipeline run."""
 
-    language: str = "zh"
+    language: str = "auto"
     lyric_output_mode: str = "auto"
     original_lyrics: str = ""
     output_formats: list[str] = field(default_factory=lambda: ["mid"])
@@ -71,6 +71,92 @@ class V2MRequest:
     kashi_g2p_model: str = "kashi-g2p-onnx"
     device: str | None = None
     source: str | None = None
+
+
+#: Values accepted for :attr:`V2MRequest.language` that trigger auto-detection.
+AUTO_LANGUAGE_VALUES = {"", "auto", "detect", "autodetect", "auto-detect", "guess"}
+
+#: Languages the vendored lyric pipeline (LFA / TiFA / HFA G2P) can process.
+SUPPORTED_PIPELINE_LANGUAGES = ("zh", "en", "ja", "yue")
+
+#: Qwen3-ASR returns canonical names (e.g. ``"Chinese"``); map them onto the
+#: pipeline's language codes.  Names outside this map are unsupported.
+_QWEN_LANGUAGE_TO_CODE = {
+    "chinese": "zh",
+    "mandarin": "zh",
+    "cantonese": "yue",
+    "yue": "yue",
+    "japanese": "ja",
+    "english": "en",
+}
+
+
+def _map_detected_language(name: str | None) -> str | None:
+    """Map a Qwen3-ASR language string to a pipeline language code.
+
+    Qwen may return a comma-joined list (``"Chinese,English"``); the first
+    supported entry wins.  Returns ``None`` when nothing is usable.
+    """
+
+    if not name:
+        return None
+    for token in str(name).replace(",", " ").split():
+        code = _QWEN_LANGUAGE_TO_CODE.get(token.strip().lower())
+        if code:
+            return code
+    return None
+
+
+def detect_language(
+    *,
+    asr_manager: ASRManager,
+    qwen_path: str,
+    audio_path: Path,
+    settings: Settings,
+) -> str:
+    """Auto-detect the lyric language with the (multilingual) Qwen3-ASR model.
+
+    A short window is sampled from the start of the audio and, when that is
+    silent or inconclusive, from the middle.  Falls back to
+    ``settings.v2m_default_language`` when detection fails or returns a
+    language the pipeline cannot align.
+    """
+
+    from ._vendor.inference.io.audio_io import load_audio
+
+    default = settings.v2m_default_language
+    try:
+        waveform, sr = load_audio(str(audio_path), 16000)
+    except Exception as error:  # noqa: BLE001 - ffmpeg missing / bad container
+        logger.warning("Language auto-detection skipped (audio load failed: %s)", error)
+        return default
+
+    total = int(waveform.shape[-1])
+    window = int(settings.v2m_language_detect_sec * sr)
+    if window <= 0 or window >= total:
+        samples = [waveform]
+    else:
+        samples = [waveform[:window], waveform[max(0, (total - window) // 2):][:window]]
+
+    for sample in samples:
+        if sample.shape[-1] < sr * 0.5:
+            continue
+        try:
+            result = asr_manager.transcribe_path(
+                "qwen3", Path(qwen_path), sample, language=None
+            )
+        except Exception as error:  # noqa: BLE001 - detection is best-effort
+            logger.warning("Language auto-detection ASR failed: %s", error)
+            continue
+        code = _map_detected_language(result.language)
+        if code:
+            logger.info("Auto-detected language=%s (raw=%r)", code, result.language)
+            return code
+
+    logger.warning(
+        "Language auto-detection inconclusive; falling back to %r", default
+    )
+    return default
 
 
 def _uses_pinyin(req: V2MRequest) -> bool:
@@ -132,7 +218,30 @@ def run_v2m_pipeline(
 
     from ._vendor.inference.pipeline.auto_lyric_hybrid import auto_lyric_hybrid_pipeline
 
-    language = (request.language or "zh").strip().lower() or "zh"
+    language = (request.language or "").strip().lower()
+    if language in AUTO_LANGUAGE_VALUES:
+        if request.output_lyrics:
+            qwen_path = str(_ensure_asr(asr_manager, request.asr_model, request.source))
+            language = detect_language(
+                asr_manager=asr_manager,
+                qwen_path=qwen_path,
+                audio_path=audio_path,
+                settings=settings,
+            )
+        else:
+            # Without lyrics the language only nudges GAME's vowel heuristics,
+            # so do not pay for an ASR pass just to detect it.
+            language = settings.v2m_default_language
+        # Reflect the resolved value so callers/metadata see what was used.
+        request.language = language
+    elif not language:
+        language = settings.v2m_default_language
+    if language not in SUPPORTED_PIPELINE_LANGUAGES:
+        logger.warning(
+            "language=%r is not supported by the lyric pipeline; "
+            "notes will be extracted without lyrics.",
+            language,
+        )
     device = request.device or settings.device
 
     game_dir = str(v2m.resolve_path(request.game_model, request.source))

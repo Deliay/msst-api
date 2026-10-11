@@ -1028,7 +1028,7 @@ def _build_v2m_request(form) -> object:  # noqa: ANN001
             detail=f"Invalid output format(s): {invalid}. Expected {sorted(SUPPORTED_OUTPUT_FORMATS)}",
         )
     return V2MRequest(
-        language=_form_str(form, "language", "zh") or "zh",
+        language=_form_str(form, "language", "auto") or "auto",
         lyric_output_mode=_form_str(form, "lyric_output_mode", "auto") or "auto",
         original_lyrics=_form_str(form, "original_lyrics", "") or "",
         output_formats=formats,

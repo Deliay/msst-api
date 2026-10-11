@@ -144,6 +144,18 @@ class Settings:
     v2m_max_chunk_sec: float = field(
         default_factory=lambda: _env_float("MSST_V2M_MAX_CHUNK_SEC", 30.0)
     )
+    #: Seconds of audio sampled to auto-detect the language when the request
+    #: omits ``language`` (or passes ``auto``). (``MSST_V2M_LANGUAGE_DETECT_SEC``)
+    v2m_language_detect_sec: float = field(
+        default_factory=lambda: _env_float("MSST_V2M_LANGUAGE_DETECT_SEC", 30.0)
+    )
+    #: Language used when the request omits ``language`` and auto-detection is
+    #: inconclusive or returns a language the lyric pipeline cannot handle.
+    #: One of zh/en/ja/yue. (``MSST_V2M_DEFAULT_LANGUAGE``)
+    v2m_default_language: str = field(
+        default_factory=lambda: os.environ.get("MSST_V2M_DEFAULT_LANGUAGE", "zh").strip().lower()
+        or "zh"
+    )
 
     # --- Server ------------------------------------------------------------
     host: str = field(default_factory=lambda: os.environ.get("MSST_HOST", "0.0.0.0"))
@@ -254,6 +266,8 @@ class Settings:
             self.v2m_tifa_opset = 18
         if self.v2m_max_chunk_sec < 0:
             self.v2m_max_chunk_sec = 0.0
+        if self.v2m_language_detect_sec < 0:
+            self.v2m_language_detect_sec = 0.0
         if self.download_backend not in {"modelscope", "huggingface", "auto"}:
             self.download_backend = "auto"
 

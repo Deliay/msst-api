@@ -79,8 +79,19 @@ def resolve_onnx_providers(
         # kSameAsRequested avoids the BFC arena rounding each allocation up to
         # the next power of two (kNextPowerOfTwo), which otherwise inflates
         # peak VRAM for the large attention buffers in GAME/TiFA and can OOM.
+        # cudnn_conv_algo_search=DEFAULT (not ORT's EXHAUSTIVE/HEURISTIC) stops
+        # cuDNN from grabbing a multi-GB scratch buffer when a conv sees a new
+        # input length -- e.g. a short ASR chunk right after a long one used to
+        # spike ~10 GB (reproduced on the HuBERT CTC ASR sessions).
         return "cuda", [
-            ("CUDAExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"}),
+            (
+                "CUDAExecutionProvider",
+                {
+                    "arena_extend_strategy": "kSameAsRequested",
+                    "cudnn_conv_algo_search": "DEFAULT",
+                    "cudnn_conv_use_max_workspace": "0",
+                },
+            ),
             "CPUExecutionProvider",
         ]
 

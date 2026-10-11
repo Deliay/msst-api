@@ -190,6 +190,20 @@ def test_onnx_cuda_provider_uses_memory_frugal_arena():
         assert providers[0][0] == "CUDAExecutionProvider"
         # Avoid ORT's kNextPowerOfTwo arena rounding, which inflates VRAM.
         assert providers[0][1]["arena_extend_strategy"] == "kSameAsRequested"
+        # DEFAULT conv search avoids cuDNN's multi-GB scratch on new shapes.
+        assert providers[0][1]["cudnn_conv_algo_search"] == "DEFAULT"
+
+
+def test_to_asr_rate_resamples_to_16k():
+    from msst_api.v2m._vendor.inference.API.asr_api import ASR_SAMPLE_RATE, _to_asr_rate
+
+    one_sec_44k = np.sin(np.linspace(0.0, 2 * np.pi * 440, 44100)).astype(np.float32)
+    out = _to_asr_rate(one_sec_44k, 44100)
+    assert abs(out.size - ASR_SAMPLE_RATE) <= 1
+    assert out.dtype == np.float32
+
+    already_16k = np.zeros(1234, dtype=np.float32)
+    assert _to_asr_rate(already_16k, 16000).size == 1234
 
 
 def test_cap_chunk_length_splits_only_over_length_chunks():
@@ -206,3 +220,63 @@ def test_cap_chunk_length_splits_only_over_length_chunks():
 
     short = [{"offset": 1.0, "waveform": np.zeros(1000, dtype=np.float32)}]
     assert _cap_chunk_length(short, sr, 5.0) == short
+
+
+def test_v2m_request_defaults_to_auto_language():
+    assert pipeline_module.V2MRequest().language == "auto"
+
+
+def test_map_detected_language():
+    from msst_api.v2m.pipeline import _map_detected_language
+
+    assert _map_detected_language("Chinese") == "zh"
+    assert _map_detected_language("Mandarin") == "zh"
+    assert _map_detected_language("Cantonese") == "yue"
+    assert _map_detected_language("Japanese") == "ja"
+    assert _map_detected_language("English") == "en"
+    assert _map_detected_language("Chinese,English") == "zh"
+    assert _map_detected_language("Korean") is None
+    assert _map_detected_language("") is None
+    assert _map_detected_language(None) is None
+
+
+def test_detect_language_uses_asr_and_falls_back(monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from msst_api.v2m import pipeline as pl
+    from msst_api.v2m._vendor.inference.io import audio_io
+
+    monkeypatch.setattr(
+        audio_io,
+        "load_audio",
+        lambda path, sr, mono=True: (np.zeros(sr * 5, dtype=np.float32), sr),
+    )
+    settings = SimpleNamespace(v2m_default_language="zh", v2m_language_detect_sec=30.0)
+
+    calls = {}
+
+    class FakeASR:
+        def __init__(self, language):
+            self.language = language
+
+        def transcribe_path(self, kind, path, audio, language=None, device=None):
+            calls["language"] = language
+            return SimpleNamespace(language=self.language, text="x")
+
+    code = pl.detect_language(
+        asr_manager=FakeASR("Japanese"),
+        qwen_path="/qwen",
+        audio_path=Path("a.wav"),
+        settings=settings,
+    )
+    assert code == "ja"
+    assert calls["language"] is None  # unforced -> Qwen auto-detects
+
+    fallback = pl.detect_language(
+        asr_manager=FakeASR("Korean"),
+        qwen_path="/qwen",
+        audio_path=Path("a.wav"),
+        settings=settings,
+    )
+    assert fallback == "zh"

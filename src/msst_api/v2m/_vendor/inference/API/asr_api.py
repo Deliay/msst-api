@@ -25,6 +25,9 @@ import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
+#: Sample rate every ASR engine assumes (Qwen3-ASR / PinyinASR / RomajiASR).
+ASR_SAMPLE_RATE = 16000
+
 #: Kept for import compatibility with the upstream module.
 DEFAULT_QWEN_ASR_PROMPT = (
     "你是一位专业的歌词转录助手，专注于从音频中准确提取歌词文本。"
@@ -39,6 +42,29 @@ def _manager():
     from msst_api.v2m import runtime
 
     return runtime.asr_manager()
+
+
+def _to_asr_rate(waveform, sr) -> np.ndarray:
+    """Resample a pipeline chunk (44100 Hz) to the ASR engines' 16 kHz.
+
+    The vendored pipeline slices at 44.1 kHz and, upstream, writes chunk WAVs
+    that the ASR subprocess reads back at 16 kHz.  This adapter feeds the raw
+    array instead, so it must resample explicitly -- otherwise a 30 s chunk is
+    handed to the model as ~83 s (2.76x), wrecking the transcript and inflating
+    the HuBERT/ONNX attention memory.
+    """
+
+    wav = np.asarray(waveform, dtype=np.float32).reshape(-1)
+    sr = int(sr) if sr else ASR_SAMPLE_RATE
+    if sr == ASR_SAMPLE_RATE or wav.size == 0:
+        return np.ascontiguousarray(wav, dtype=np.float32)
+    from math import gcd
+
+    from scipy.signal import resample_poly
+
+    factor = gcd(sr, ASR_SAMPLE_RATE)
+    resampled = resample_poly(wav, ASR_SAMPLE_RATE // factor, sr // factor)
+    return np.ascontiguousarray(resampled, dtype=np.float32)
 
 
 def _write_chunks(chunks, sr, temp_dir_path) -> tuple[list[str], list[int]]:
@@ -81,7 +107,7 @@ def batch_transcribe_asr(
     for idx, chunk in zip(chunk_indices, chunks):
         if cancel_checker and cancel_checker():
             raise InterruptedError("ASR task cancelled")
-        waveform = np.asarray(chunk["waveform"], dtype=np.float32)
+        waveform = _to_asr_rate(chunk["waveform"], sr)
         result = manager.transcribe_path(
             "qwen3",
             Path(asr_model_path) if asr_model_path else _path_for(model_id),
@@ -115,7 +141,7 @@ def batch_transcribe_pinyin_asr(
     for chunk in chunks:
         if cancel_checker and cancel_checker():
             raise InterruptedError("ASR task cancelled")
-        waveform = np.asarray(chunk["waveform"], dtype=np.float32)
+        waveform = _to_asr_rate(chunk["waveform"], sr)
         result = manager.transcribe_path("pinyin", path, waveform, device=device)
         results.append({"text": result.text, "phonemes": result.phonemes or []})
     return results, chunk_indices
@@ -143,7 +169,7 @@ def batch_transcribe_romaji_asr(
     for chunk in chunks:
         if cancel_checker and cancel_checker():
             raise InterruptedError("ASR task cancelled")
-        waveform = np.asarray(chunk["waveform"], dtype=np.float32)
+        waveform = _to_asr_rate(chunk["waveform"], sr)
         result = manager.transcribe_path("romaji", path, waveform, device=device)
         results.append({"text": result.text, "phonemes": result.phonemes or []})
     return results, chunk_indices
