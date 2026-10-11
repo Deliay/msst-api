@@ -168,11 +168,27 @@ def _vllm_available() -> bool:
 
 
 def _empty_cuda_cache() -> None:
+    """Return freed GPU memory to the driver after a model is dropped.
+
+    ``empty_cache()`` alone can leave multi-GB blocks reserved (notably for the
+    Qwen3-ASR model), so synchronise first, empty, drop the cuBLAS workspaces
+    and empty again -- on an 8 GB card this is the difference between freeing
+    ~0.5 GB and retaining ~3.8 GB before the next pipeline stage loads.
+    """
+
     try:
         import torch
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if not torch.cuda.is_available():
+            return
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        try:
+            torch._C._cuda_clearCublasWorkspaces()
+        except Exception:  # noqa: BLE001 - private API, best effort
+            pass
+        gc.collect()
+        torch.cuda.empty_cache()
     except Exception:  # noqa: BLE001
         pass
 

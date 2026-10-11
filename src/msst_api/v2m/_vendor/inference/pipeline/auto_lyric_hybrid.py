@@ -1,3 +1,4 @@
+import math
 import pathlib
 import sys
 from dataclasses import dataclass
@@ -224,7 +225,45 @@ def _slice_chunks(
         raise InterruptedError("Task was cancelled")
     if not chunks:
         raise RuntimeError("No audio chunks generated in slicing stage, aborted.")
+    # The default slicer ignores ``max_len_sec``, so long continuous vocals can
+    # produce chunks that make GAME's estimator exceed a small GPU's VRAM.  Cap
+    # the chunk length here so GAME memory stays bounded.
+    max_chunk_sec = 0.0
+    try:
+        from msst_api.v2m import runtime as _v2m_runtime
+
+        max_chunk_sec = float(getattr(_v2m_runtime.settings(), "v2m_max_chunk_sec", 0.0) or 0.0)
+    except Exception:  # noqa: BLE001 - runtime not configured (e.g. unit test)
+        max_chunk_sec = 0.0
+    if max_chunk_sec > 0:
+        chunks = _cap_chunk_length(chunks, sr, max_chunk_sec)
     return chunks
+
+
+def _cap_chunk_length(chunks, sr, max_chunk_sec):
+    """Split any chunk longer than ``max_chunk_sec`` to bound GAME VRAM."""
+
+    max_samples = max(1, int(max_chunk_sec * sr))
+    capped = []
+    for chunk in chunks:
+        waveform = chunk["waveform"]
+        length = int(waveform.shape[-1])
+        if length <= max_samples:
+            capped.append(chunk)
+            continue
+        offset = float(chunk.get("offset", 0.0))
+        parts = math.ceil(length / max_samples)
+        for index in range(parts):
+            start = index * max_samples
+            end = min(length, start + max_samples)
+            capped.append(
+                {"offset": offset + start / sr, "waveform": waveform[..., start:end]}
+            )
+        logger.info(
+            f"[Hybrid Pipeline] Split a {length / sr:.1f}s chunk into {parts} parts "
+            f"(<= {max_chunk_sec:.0f}s) for GAME VRAM."
+        )
+    return capped
 
 
 def _run_game_stage(

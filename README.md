@@ -347,6 +347,13 @@ ONNX graphs are exported with the vendored TIFA `deploy` code
 RMVPE predictor (`MSST_V2M_RMVPE_BACKEND=rvc`). `alignment_engine=hfa` remains an
 alternative aligner.
 
+**Low VRAM (8 GB).** The pipeline keeps `MSST_MAX_LOADED_MODELS=1` and releases
+each model (with a full CUDA cache flush) before loading the next. GAME's
+estimator is the other consumer, so chunks are capped at
+`MSST_V2M_MAX_CHUNK_SEC` (default 30 s). Peak on an otherwise-empty 8 GB card is
+~5.5 GB with `chinese_asr_engine=qwen` (Qwen3-ASR-1.7B, bf16); use
+`chinese_asr_engine=pinyin` there for more headroom.
+
 ```bash
 curl -X POST http://localhost:8000/api/v2m/inference \
   -F "audio=@vocal.wav" \
@@ -418,6 +425,7 @@ Each pipeline stage is also exposed on its own:
 | `MSST_V2M_CATALOG` | empty | Extra JSON catalog for v2m models |
 | `MSST_V2M_RMVPE_BACKEND` | `rvc` | Pitch-curve backend: `rvc` (reuse RVC RMVPE) / `onnx` |
 | `MSST_V2M_TIFA_OPSET` | `18` | ONNX opset (18–20) for the TiFA export |
+| `MSST_V2M_MAX_CHUNK_SEC` | `30` | Cap on each GAME chunk; bounds estimator VRAM (0 = off) |
 | `MSST_GITHUB_PROXY` | `https://ghfast.top/` | Prefix proxy for GitHub release downloads (empty = direct) |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |

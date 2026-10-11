@@ -291,6 +291,11 @@ GAME、HubertFA、kashi-g2p 从其 GitHub Release 资产解压（经 `MSST_GITHU
 `deploy` 代码导出（`MSST_V2M_TIFA_OPSET`，默认 18）；音高曲线复用 RVC/Applio 的 RMVPE
 预测器（`MSST_V2M_RMVPE_BACKEND=rvc`）。也可改用 `alignment_engine=hfa`。
 
+**低显存（8 GB）。** 流程保持 `MSST_MAX_LOADED_MODELS=1`，在加载下一个模型前释放上一个
+（并完整清空 CUDA 缓存）。GAME 的 estimator 是另一大占用，因此分块被限制在
+`MSST_V2M_MAX_CHUNK_SEC`（默认 30 秒）。在空闲的 8 GB 卡上，`chinese_asr_engine=qwen`
+（Qwen3-ASR-1.7B，bf16）时峰值约 5.5 GB；可用 `chinese_asr_engine=pinyin` 获得更大余量。
+
 ```bash
 curl -X POST http://localhost:8000/api/v2m/inference \
   -F "audio=@vocal.wav" \
@@ -341,6 +346,7 @@ curl -X POST http://localhost:8000/api/v2m/inference \
 | `MSST_V2M_CATALOG` | 空 | 追加的 v2m 模型 JSON 目录 |
 | `MSST_V2M_RMVPE_BACKEND` | `rvc` | 音高曲线后端：`rvc`（复用 RVC RMVPE）/ `onnx` |
 | `MSST_V2M_TIFA_OPSET` | `18` | TiFA 导出的 ONNX opset（18–20） |
+| `MSST_V2M_MAX_CHUNK_SEC` | `30` | 每个 GAME 分块上限（秒），约束显存（0 关闭） |
 | `MSST_GITHUB_PROXY` | `https://ghfast.top/` | GitHub 发布资产下载的前缀代理（留空则直连） |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |

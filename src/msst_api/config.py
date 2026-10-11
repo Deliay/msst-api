@@ -137,6 +137,13 @@ class Settings:
     v2m_tifa_keep_source: bool = field(
         default_factory=lambda: _env_bool("MSST_V2M_TIFA_KEEP_SOURCE", False)
     )
+    #: Hard cap (seconds) on each audio chunk fed to GAME.  GAME's estimator VRAM
+    #: grows steeply with chunk length (roughly 2.8 GB at 30 s, 6 GB at 50 s,
+    #: 8+ GB at 60 s on a 24 GB card), so long chunks are split before note
+    #: extraction.  Set 0 to disable. (``MSST_V2M_MAX_CHUNK_SEC``)
+    v2m_max_chunk_sec: float = field(
+        default_factory=lambda: _env_float("MSST_V2M_MAX_CHUNK_SEC", 30.0)
+    )
 
     # --- Server ------------------------------------------------------------
     host: str = field(default_factory=lambda: os.environ.get("MSST_HOST", "0.0.0.0"))
@@ -245,6 +252,8 @@ class Settings:
             self.v2m_rmvpe_backend = "rvc"
         if not 18 <= self.v2m_tifa_opset <= 20:
             self.v2m_tifa_opset = 18
+        if self.v2m_max_chunk_sec < 0:
+            self.v2m_max_chunk_sec = 0.0
         if self.download_backend not in {"modelscope", "huggingface", "auto"}:
             self.download_backend = "auto"
 

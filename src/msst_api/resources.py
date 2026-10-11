@@ -169,7 +169,17 @@ def _release_accelerator_cache() -> None:
         import torch
 
         if torch.cuda.is_available():
+            # empty_cache() alone can leave blocks reserved; synchronise and
+            # clear the cuBLAS workspaces so the next model starts from a clean
+            # GPU (critical on an 8 GB card).
+            torch.cuda.synchronize()
             torch.cuda.empty_cache()
+            try:
+                torch._C._cuda_clearCublasWorkspaces()
+            except Exception:  # noqa: BLE001 - private API, best effort
+                pass
             torch.cuda.ipc_collect()
+            gc.collect()
+            torch.cuda.empty_cache()
     except Exception:  # noqa: BLE001 - torch optional / not on CUDA
         pass

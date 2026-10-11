@@ -190,3 +190,19 @@ def test_onnx_cuda_provider_uses_memory_frugal_arena():
         assert providers[0][0] == "CUDAExecutionProvider"
         # Avoid ORT's kNextPowerOfTwo arena rounding, which inflates VRAM.
         assert providers[0][1]["arena_extend_strategy"] == "kSameAsRequested"
+
+
+def test_cap_chunk_length_splits_only_over_length_chunks():
+    from msst_api.v2m._vendor.inference.pipeline.auto_lyric_hybrid import (
+        _cap_chunk_length,
+    )
+
+    sr = 1000
+    long_chunk = [{"offset": 2.0, "waveform": np.zeros(12500, dtype=np.float32)}]
+    capped = _cap_chunk_length(long_chunk, sr, 5.0)
+    assert len(capped) == 3
+    assert [round(c["offset"], 2) for c in capped] == [2.0, 7.0, 12.0]
+    assert [c["waveform"].shape[-1] for c in capped] == [5000, 5000, 2500]
+
+    short = [{"offset": 1.0, "waveform": np.zeros(1000, dtype=np.float32)}]
+    assert _cap_chunk_length(short, sr, 5.0) == short
