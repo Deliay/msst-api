@@ -65,9 +65,16 @@ def normalize_runtime_device(device: str | None, default: str | None = None) -> 
 
 
 def resolve_onnx_providers(
-    device: str | None, *, label: str = "ONNX"
+    device: str | None, *, label: str = "ONNX", conv_algo_search: str | None = None
 ) -> tuple[str, list[ProviderSpec]]:
-    """Return ``(provider_name, provider_specs)`` for an ONNX session."""
+    """Return ``(provider_name, provider_specs)`` for an ONNX session.
+
+    ``conv_algo_search`` overrides ORT's ``cudnn_conv_algo_search`` for this
+    session.  The default (``None`` -> ``"DEFAULT"``) is the memory-frugal
+    choice described below; a conv-heavy model with fixed shapes (e.g. the
+    DiffSinger vocoder) may instead ask for ``"HEURISTIC"`` to let cuDNN pick a
+    faster algorithm without the multi-GB exhaustive-search scratch.
+    """
 
     normalized = normalize_runtime_device(device)
     if normalized == "cpu":
@@ -82,13 +89,15 @@ def resolve_onnx_providers(
         # cudnn_conv_algo_search=DEFAULT (not ORT's EXHAUSTIVE/HEURISTIC) stops
         # cuDNN from grabbing a multi-GB scratch buffer when a conv sees a new
         # input length -- e.g. a short ASR chunk right after a long one used to
-        # spike ~10 GB (reproduced on the HuBERT CTC ASR sessions).
+        # spike ~10 GB (reproduced on the HuBERT CTC ASR sessions).  It logs an
+        # ORT "running in Fallback mode" warning per Conv node; models that can
+        # tolerate a heuristic search pass ``conv_algo_search="HEURISTIC"``.
         return "cuda", [
             (
                 "CUDAExecutionProvider",
                 {
                     "arena_extend_strategy": "kSameAsRequested",
-                    "cudnn_conv_algo_search": "DEFAULT",
+                    "cudnn_conv_algo_search": (conv_algo_search or "DEFAULT").upper(),
                     "cudnn_conv_use_max_workspace": "0",
                 },
             ),

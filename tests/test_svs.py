@@ -273,6 +273,64 @@ def test_svs_pipeline_all_phonemeless_raises(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Vocoder ONNX provider options
+# ---------------------------------------------------------------------------
+def test_providers_passes_conv_search_through(monkeypatch):
+    from msst_api.svs import voicebank as vb
+
+    calls = []
+
+    def fake_resolve(device, *, label="ONNX", conv_algo_search=None):
+        calls.append((device, label, conv_algo_search))
+        return "cuda", [("CUDAExecutionProvider", {"cudnn_conv_algo_search": conv_algo_search})]
+
+    monkeypatch.setattr(vb, "resolve_onnx_providers", fake_resolve)
+    providers = vb._providers("cuda", "voc.onnx", vb._VOCODER_CONV_ALGO_SEARCH)
+    assert providers[0][1]["cudnn_conv_algo_search"] == "HEURISTIC"
+    assert calls == [("cuda", "voc.onnx", "HEURISTIC")]
+
+
+def test_session_pool_keys_by_conv_search(monkeypatch):
+    from msst_api.svs import voicebank as vb
+
+    created = []
+
+    class _FakeSession:
+        def __init__(self, path, providers):
+            self.path = path
+            self.providers = providers
+
+    class _FakeOrt:
+        GraphOptimizationLevel = type("G", (), {"ORT_ENABLE_ALL": 0})
+
+        class SessionOptions:
+            graph_optimization_level = None
+
+        @staticmethod
+        def InferenceSession(path, sess_options=None, providers=None):
+            created.append((path, providers))
+            return _FakeSession(path, providers)
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "onnxruntime", _FakeOrt)
+
+    def fake_resolve(device, *, label="ONNX", conv_algo_search=None):
+        return "cuda", [("CUDAExecutionProvider", {"cudnn_conv_algo_search": conv_algo_search})]
+
+    monkeypatch.setattr(vb, "resolve_onnx_providers", fake_resolve)
+    pool = vb._SessionPool("cuda")
+    a = pool.get("voc.onnx", conv_algo_search="HEURISTIC")
+    b = pool.get("voc.onnx")  # different option -> separate session
+    c = pool.get("voc.onnx", conv_algo_search="HEURISTIC")  # cached
+    assert a is c
+    assert a is not b
+    assert a.providers[0][1]["cudnn_conv_algo_search"] == "HEURISTIC"
+    assert b.providers[0][1]["cudnn_conv_algo_search"] is None
+    assert len(created) == 2
+
+
+# ---------------------------------------------------------------------------
 # HTTP surface
 # ---------------------------------------------------------------------------
 def test_svs_auto_pitch_form_mapping():

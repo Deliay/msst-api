@@ -192,6 +192,11 @@ def test_onnx_cuda_provider_uses_memory_frugal_arena():
         assert providers[0][1]["arena_extend_strategy"] == "kSameAsRequested"
         # DEFAULT conv search avoids cuDNN's multi-GB scratch on new shapes.
         assert providers[0][1]["cudnn_conv_algo_search"] == "DEFAULT"
+        # Callers can opt into the heuristic search (e.g. the SVS vocoder).
+        _, heuristic = device_utils.resolve_onnx_providers(
+            "cuda", conv_algo_search="HEURISTIC"
+        )
+        assert heuristic[0][1]["cudnn_conv_algo_search"] == "HEURISTIC"
 
 
 def test_to_asr_rate_resamples_to_16k():

@@ -37,9 +37,18 @@ except Exception:  # noqa: BLE001 - vendored module missing in some installs
     resolve_onnx_providers = None  # type: ignore[assignment]
 
 
-def _providers(device: str, label: str):
+#: The DiffSinger vocoder is a fixed-shape, convolution-heavy NSF-HiFiGAN.  Its
+#: ``Conv`` nodes hit ORT's cudnn-frontend FALLBACK mode (and the "May be
+#: extremely slow" warning) under the service-wide ``DEFAULT`` conv search, so
+#: let cuDNN use its lightweight heuristic search here instead.
+_VOCODER_CONV_ALGO_SEARCH = "HEURISTIC"
+
+
+def _providers(device: str, label: str, conv_algo_search: str | None = None):
     if resolve_onnx_providers is not None:
-        _, providers = resolve_onnx_providers(device, label=label)
+        _, providers = resolve_onnx_providers(
+            device, label=label, conv_algo_search=conv_algo_search
+        )
         return providers
     import onnxruntime as ort
 
@@ -90,12 +99,15 @@ class _SessionPool:
     def __init__(self, device: str) -> None:
         self.device = device
         self._lock = threading.Lock()
-        self._sessions: dict[Path, object] = {}
+        # Keyed by (path, conv_algo_search) so the same file can be loaded with
+        # different cudnn conv-search options without clobbering each other.
+        self._sessions: dict[tuple[Path, str | None], object] = {}
 
-    def get(self, path: str | Path) -> object:
+    def get(self, path: str | Path, conv_algo_search: str | None = None) -> object:
         path = Path(path).resolve()
+        key = (path, conv_algo_search)
         with self._lock:
-            cached = self._sessions.get(path)
+            cached = self._sessions.get(key)
             if cached is not None:
                 return cached
         import onnxruntime as ort
@@ -104,11 +116,13 @@ class _SessionPool:
         options = ort.SessionOptions()
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session = ort.InferenceSession(
-            str(path), sess_options=options, providers=_providers(self.device, path.name)
+            str(path),
+            sess_options=options,
+            providers=_providers(self.device, path.name, conv_algo_search),
         )
         with self._lock:
-            self._sessions.setdefault(path, session)
-            return self._sessions[path]
+            self._sessions.setdefault(key, session)
+            return self._sessions[key]
 
     def close_all(self) -> None:
         with self._lock:
@@ -237,7 +251,9 @@ class DiffSingerVoicebank:
             self.root, self.config
         )
         self.vocoder_root = vocoder_root
-        self.vocoder = self._pool.get(vocoder_model)
+        self.vocoder = self._pool.get(
+            vocoder_model, conv_algo_search=_VOCODER_CONV_ALGO_SEARCH
+        )
         self._validate_vocoder()
 
         self.dur = self._submodel("dsdur", "dur")
