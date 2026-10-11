@@ -71,6 +71,15 @@ BUNDLED_MODELS: list[ModelEntry] = [
             "score.onnx",
             "select.onnx",
             "model.onnx",
+            # The vendored TiFA G2P pipeline is rooted at the model directory and
+            # reads these alongside the graphs (see g2p_pipeline.py).
+            "dictionaries/ds-zh-pinyin-lite.txt",
+            "dictionaries/japanese_dict_full.txt",
+            "dictionaries/ds_cmudict-07b.txt",
+            "assets/LstmG2p-Eng/encoder.onnx",
+            "assets/LstmG2p-Eng/decoder.onnx",
+            "assets/LstmG2p-Eng/char.json",
+            "assets/LstmG2p-Eng/phonemes.json",
         ),
         snapshots=(),
         archives=(
