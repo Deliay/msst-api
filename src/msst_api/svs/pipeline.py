@@ -46,7 +46,7 @@ class SVSRequest:
     steps: int = 20
     #: When False the auto-pitch step is skipped and the score's own ``pitd``
     #: (if any) is used.
-    generate_pitch: bool = True
+    auto_pitch: bool = True
     #: When False only the auto-pitch step runs (returns the ``pitd`` USTX with
     #: no audio).
     render: bool = True
@@ -218,7 +218,7 @@ def run_svs_pipeline(
     # --- auto pitch -------------------------------------------------------
     all_points: list[PitchPoint] = []
     min_pitd, _ = project.expression_range("pitd")
-    if request.generate_pitch and voicebank.has_pitch:
+    if request.auto_pitch and voicebank.has_pitch:
         for phrase_groups in phrases:
             specs, phrase_notes = _phone_specs(phonemizer, project, phrase_groups)
             render_phrase_obj = build_phrase(

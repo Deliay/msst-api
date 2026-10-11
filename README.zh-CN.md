@@ -384,7 +384,7 @@ curl -X POST http://localhost:8000/api/diffsinger/pitch \
 | `ustx` | — | 待渲染的 OpenUtau 乐谱（必填）。 |
 | `model` | `MSST_SVS_DEFAULT_MODEL` | 声库 id（目录名），来自 `/api/diffsinger/models`。 |
 | `language` | `auto` | `auto`（按歌词/声库自动判断）/ `ja` / `zh`。 |
-| `generate_pitch` | `true` | 是否运行自动音高；`false` 时使用乐谱自带的 `pitd`。 |
+| `auto_pitch` | `true` | 是否运行自动音高；`false` 时使用乐谱自带的 `pitd`。 |
 | `pitch_steps` | `20` | 自动音高模型的采样步数。 |
 | `variance_steps` | `20` | 方差模型的采样步数。 |
 | `steps` | `20` | 声学模型的采样步数。 |

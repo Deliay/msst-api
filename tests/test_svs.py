@@ -206,6 +206,18 @@ def test_detect_language_prefers_covered_dictionary(tmp_path):
 # ---------------------------------------------------------------------------
 # HTTP surface
 # ---------------------------------------------------------------------------
+def test_svs_auto_pitch_form_mapping():
+    pytest.importorskip("torch")
+    pytest.importorskip("fastapi")
+    from msst_api import main as main_module
+
+    assert main_module._build_svs_request({}).auto_pitch is True
+    assert main_module._build_svs_request({"auto_pitch": "false"}).auto_pitch is False
+    assert main_module._build_svs_request({"auto_pitch": "true"}).auto_pitch is True
+    # ``generate_pitch`` stays accepted as a legacy alias.
+    assert main_module._build_svs_request({"generate_pitch": "false"}).auto_pitch is False
+
+
 def test_svs_models_empty(monkeypatch, tmp_path):
     pytest.importorskip("torch")
     pytest.importorskip("fastapi")

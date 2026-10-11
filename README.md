@@ -469,7 +469,7 @@ curl -X POST http://localhost:8000/api/diffsinger/pitch \
 | `ustx` | — | The OpenUtau score to render (required). |
 | `model` | `MSST_SVS_DEFAULT_MODEL` | Voicebank id (folder name) from `/api/diffsinger/models`. |
 | `language` | `auto` | `auto` (detect from the lyrics/voicebank) / `ja` / `zh`. |
-| `generate_pitch` | `true` | Run the auto-pitch model; when `false` the score's own `pitd` is used. |
+| `auto_pitch` | `true` | Run the auto-pitch model; when `false` the score's own `pitd` is used. |
 | `pitch_steps` | `20` | Sampling steps for the auto-pitch model. |
 | `variance_steps` | `20` | Sampling steps for the variance model. |
 | `steps` | `20` | Sampling steps for the acoustic model. |

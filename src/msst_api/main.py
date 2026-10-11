@@ -1364,13 +1364,18 @@ def _header_safe(value: str) -> str:
 
 
 def _build_svs_request(form) -> SVSRequest:  # noqa: ANN001
+    # ``auto_pitch`` is the documented field; ``generate_pitch`` is kept as an
+    # alias for older clients.
+    auto_pitch = _form_bool(
+        form, "auto_pitch", _form_bool(form, "generate_pitch", True)
+    )
     return SVSRequest(
         language=_form_str(form, "language", "auto") or "auto",
         pitch_steps=_form_int(form, "pitch_steps", 20),
         variance_steps=_form_int(form, "variance_steps", 20),
         depth=_form_float(form, "depth", 1.0),
         steps=_form_int(form, "steps", 20),
-        generate_pitch=_form_bool(form, "generate_pitch", True),
+        auto_pitch=auto_pitch,
         render=_form_bool(form, "render", True),
     )
 
@@ -1514,7 +1519,7 @@ async def diffsinger_pitch(request: Request):
     form, upload, voice = await _read_svs_form(request)
     svs_request = _build_svs_request(form)
     svs_request.render = False
-    svs_request.generate_pitch = True
+    svs_request.auto_pitch = True
 
     data = await upload.read()
     if not data:
