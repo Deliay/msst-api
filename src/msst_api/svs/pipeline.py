@@ -296,15 +296,22 @@ def run_svs_pipeline(
 
 
 def _assemble(rendered: list[tuple[float, np.ndarray]], sample_rate: int) -> np.ndarray:
+    """Place rendered phrases on the project timeline.
+
+    ``rendered`` holds ``(start_seconds, samples)`` with ``start_seconds``
+    measured from the song start (tick 0).  The buffer is anchored at t=0 so
+    silence before the first note is preserved -- previously the earliest phrase
+    was shifted to 0, which discarded that leading offset and made the render
+    start singing immediately.
+    """
+
     if not rendered:
         return np.zeros(0, dtype=np.float32)
-    starts = [start for start, _ in rendered]
-    min_start = min(starts)
     end = max(start + clip.size / sample_rate for start, clip in rendered)
-    total = int(round((end - min_start) * sample_rate)) + 1
+    total = int(round(end * sample_rate)) + 1
     buffer = np.zeros(max(total, 1), dtype=np.float32)
     for start, clip in rendered:
-        offset = int(round((start - min_start) * sample_rate))
+        offset = int(round(start * sample_rate))
         if offset < 0:
             clip = clip[-offset:]
             offset = 0

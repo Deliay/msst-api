@@ -273,6 +273,31 @@ def test_svs_pipeline_all_phonemeless_raises(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Timeline assembly
+# ---------------------------------------------------------------------------
+def test_assemble_preserves_leading_silence():
+    from msst_api.svs.pipeline import _assemble
+
+    sr = 100
+    clip = np.ones(10, dtype=np.float32)
+    out = _assemble([(2.0, clip)], sr)
+    # Song starts at t=0, so the first 2 s are silence, then the phrase.
+    assert out.size == int(round(2.1 * sr)) + 1
+    assert np.all(out[:200] == 0.0)
+    assert np.all(out[200:210] == 1.0)
+
+
+def test_assemble_overlaps_phrases_on_timeline():
+    from msst_api.svs.pipeline import _assemble
+
+    sr = 100
+    a = np.ones(20, dtype=np.float32)
+    b = np.full(20, 2.0, dtype=np.float32)
+    out = _assemble([(0.0, a), (0.1, b)], sr)
+    assert np.all(out[10:20] == 3.0)  # 0.1 s of overlap sums
+
+
+# ---------------------------------------------------------------------------
 # Vocoder ONNX provider options
 # ---------------------------------------------------------------------------
 def test_providers_passes_conv_search_through(monkeypatch):
