@@ -8,6 +8,7 @@ from msst_api.download import (
     _apply_github_proxy,
     _candidates_for,
     _derive_modelscope_sources,
+    download_snapshot,
 )
 
 
@@ -76,3 +77,22 @@ def test_github_proxy_disabled_when_empty() -> None:
     settings = _settings(github_proxy="")
     url = "https://github.com/openvpi/GAME/releases/download/v1.0.3/x.zip"
     assert _apply_github_proxy(url, settings) == url
+
+
+def test_download_snapshot_populates_dest(tmp_path, monkeypatch) -> None:
+    import huggingface_hub
+
+    settings = Settings(model_dir=tmp_path / "models")
+
+    def fake_snapshot_download(repo_id, *, repo_type, local_dir, **kwargs):
+        dest = Path(local_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "config.json").write_text("{}")
+        (dest / "model.onnx").write_bytes(b"onnx")
+        return local_dir
+
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", fake_snapshot_download)
+    dest = tmp_path / "models" / "asr" / "bundle"
+    path = download_snapshot("org/repo", dest, backend="huggingface", settings=settings)
+    assert (path / "config.json").is_file()
+    assert (path / "model.onnx").is_file()

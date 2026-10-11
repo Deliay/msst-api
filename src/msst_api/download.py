@@ -17,6 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -123,8 +124,6 @@ def _download_http(url: str, dest: Path, settings: Settings) -> Path:
 def _download_huggingface(
     repo_id: str, filename: str, dest: Path, settings: Settings
 ) -> Path:
-    import tempfile
-
     # Bound the hub client so a stalled connection fails instead of hanging.
     os.environ.setdefault(
         "HF_HUB_DOWNLOAD_TIMEOUT", str(int(settings.download_timeout or 60))
@@ -158,8 +157,6 @@ def _download_huggingface(
 def _download_modelscope(
     repo_id: str, filename: str, dest: Path, settings: Settings
 ) -> Path:
-    import tempfile
-
     from modelscope.hub.file_download import model_file_download
 
     dest.parent.mkdir(parents=True, exist_ok=True)
