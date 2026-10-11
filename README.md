@@ -379,7 +379,7 @@ curl -X POST http://localhost:8000/api/v2m/inference \
 | --- | --- | --- |
 | `audio` | file (required) | Input vocal audio. |
 | `language` | str | `zh`, `ja`, `en`, `yue` (default `zh`). |
-| `lyric_output_mode` | str | `auto` / `hanzi` / `pinyin` / `romaji` / `kana` / `word` / `jyutping`. |
+| `lyric_output_mode` | str | `auto` (default; romanised: pinyin / Jyutping / romaji) / `hanzi` / `pinyin` / `romaji` / `kana` / `word` / `jyutping`. |
 | `original_lyrics` | str | Optional reference lyrics for matching. |
 | `output_formats` | str | Comma list: `mid` (default), `txt`, `csv`, `ustx`, `vsqx`, `textgrid`, `chunks`, `asr_match_log`. |
 | `output_lyrics` | bool | `true` (default) runs ASR + alignment; `false` extracts pitch only. |
@@ -481,8 +481,10 @@ curl -X POST http://localhost:8000/api/diffsinger/pitch \
 
 > Only the models the voicebank declares are used; missing optional sub-models
 > (e.g. no `dspitch/`) degrade gracefully (the score's `pitd` is used as-is).
-> Chinese (`zh`) lyrics may be pinyin or hanzi; hanzi conversion needs the
-> optional [`pypinyin`](https://pypi.org/project/pypinyin/) package.
+> Chinese (`zh`) lyrics may be pinyin or hanzi. The v2m endpoint emits pinyin
+> by default (`lyric_output_mode=auto`), so a v2m score feeds straight in;
+> hanzi lyrics need the optional
+> [`pypinyin`](https://pypi.org/project/pypinyin/) package.
 > See [`docs/diffsinger-autopitch.md`](docs/diffsinger-autopitch.md) for how the
 > auto-pitch step works in OpenUtau.
 
@@ -616,6 +618,9 @@ uv run pytest
 
 - GPU-only by default; the image is based on
   `nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04`.
+- `onnxruntime-gpu` is pinned to `<1.27` (see `pyproject.toml`). ORT 1.27+
+  publishes CUDA 13 builds that require `libcublasLt.so.13`, which is not
+  present in the CUDA 12.8 runtime image; 1.26.x is the last CUDA 12.8 line.
 - The first request is slow (model download/load, potentially minutes);
   subsequent requests hit the cache.
 - Weights and audio may be copyright-protected; respect each model's and

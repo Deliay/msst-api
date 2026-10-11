@@ -204,6 +204,75 @@ def test_detect_language_prefers_covered_dictionary(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Phrases with no phonemes
+# ---------------------------------------------------------------------------
+class _StubPhonemizer:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def process_phrase_with_axis(self, phrase_groups, time_axis):
+        # Only the sentence starting at tick 0 resolves to a phoneme.
+        if phrase_groups[0][0].position == 0:
+            return {0: [("ja/a", 0)]}
+        return {}
+
+
+class _StubRenderVoicebank:
+    dur = object()
+    has_pitch = False
+    sample_rate = 44100
+
+
+def _two_phrase_ustx() -> dict:
+    data = _minimal_ustx()
+    # Two non-contiguous notes => two sentences; the second has no phonemes.
+    data["voice_parts"][0]["notes"] = [
+        {"position": 0, "duration": 480, "tone": 60, "lyric": "a"},
+        {"position": 960, "duration": 480, "tone": 62, "lyric": "i"},
+    ]
+    return data
+
+
+def _write_two_phrase_ustx(tmp_path):
+    path = tmp_path / "song.ustx"
+    path.write_text(
+        yaml.safe_dump(_two_phrase_ustx(), allow_unicode=True), encoding="utf-8"
+    )
+    return path
+
+
+def test_svs_pipeline_skips_phonemeless_phrase(monkeypatch, tmp_path):
+    from msst_api.svs import pipeline as pipeline_module
+
+    monkeypatch.setattr(pipeline_module, "DiffSingerPhonemizer", _StubPhonemizer)
+    result = pipeline_module.run_svs_pipeline(
+        _StubRenderVoicebank(),
+        str(_write_two_phrase_ustx(tmp_path)),
+        pipeline_module.SVSRequest(language="ja", auto_pitch=False, render=False),
+    )
+    assert result.phrases == 2
+    assert len(result.warnings) == 1
+    assert "Skipped 1 phrase" in result.warnings[0]
+
+
+def test_svs_pipeline_all_phonemeless_raises(monkeypatch, tmp_path):
+    from msst_api.svs import SVSError
+    from msst_api.svs import pipeline as pipeline_module
+
+    class _EmptyPhonemizer(_StubPhonemizer):
+        def process_phrase_with_axis(self, phrase_groups, time_axis):
+            return {}
+
+    monkeypatch.setattr(pipeline_module, "DiffSingerPhonemizer", _EmptyPhonemizer)
+    with pytest.raises(SVSError):
+        pipeline_module.run_svs_pipeline(
+            _StubRenderVoicebank(),
+            str(_write_two_phrase_ustx(tmp_path)),
+            pipeline_module.SVSRequest(language="ja", auto_pitch=False, render=False),
+        )
+
+
+# ---------------------------------------------------------------------------
 # HTTP surface
 # ---------------------------------------------------------------------------
 def test_svs_auto_pitch_form_mapping():

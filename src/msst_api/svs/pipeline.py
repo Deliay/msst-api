@@ -215,12 +215,35 @@ def run_svs_pipeline(
     phonemizer = DiffSingerPhonemizer(voicebank.dur, language)
     phrases = _split_phrases(groups)
 
+    # Phonemize each sentence once: the auto-pitch and render stages consume the
+    # same alignment.  A sentence whose notes resolve to no phonemes (all rests
+    # / orphan slurs, or lyrics the voicebank's dictionary does not cover) cannot
+    # be built into a phrase, so skip it instead of aborting the whole request.
+    warnings: list[str] = []
+    prepared: list[tuple[list[UstxNote], list[tuple[str, int, int]]]] = []
+    skipped_phrases = 0
+    for phrase_groups in phrases:
+        specs, phrase_notes = _phone_specs(phonemizer, project, phrase_groups)
+        if not specs:
+            skipped_phrases += 1
+            continue
+        prepared.append((phrase_notes, specs))
+    if skipped_phrases:
+        warnings.append(
+            f"Skipped {skipped_phrases} phrase(s) with no phonemes (rests, "
+            "orphan slurs, or lyrics missing from the voicebank dictionary)."
+        )
+    if not prepared:
+        raise SVSError(
+            "No phonemes could be generated for any phrase; check the note "
+            "lyrics and that the voicebank language matches them."
+        )
+
     # --- auto pitch -------------------------------------------------------
     all_points: list[PitchPoint] = []
     min_pitd, _ = project.expression_range("pitd")
     if request.auto_pitch and voicebank.has_pitch:
-        for phrase_groups in phrases:
-            specs, phrase_notes = _phone_specs(phonemizer, project, phrase_groups)
+        for phrase_notes, specs in prepared:
             render_phrase_obj = build_phrase(
                 project, phrase_notes, specs, project.part_position
             )
@@ -239,14 +262,12 @@ def run_svs_pipeline(
             phrases=len(phrases),
             notes=len(project.notes),
             duration_seconds=0.0,
-            warnings=[],
+            warnings=warnings,
         )
 
     # --- render -----------------------------------------------------------
     rendered: list[tuple[float, np.ndarray]] = []
-    warnings: list[str] = []
-    for phrase_groups in phrases:
-        specs, phrase_notes = _phone_specs(phonemizer, project, phrase_groups)
+    for phrase_notes, specs in prepared:
         render_phrase_obj = build_phrase(
             project, phrase_notes, specs, project.part_position
         )

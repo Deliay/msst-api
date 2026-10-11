@@ -240,6 +240,21 @@ def test_map_detected_language():
     assert _map_detected_language(None) is None
 
 
+def test_resolve_lyric_output_mode_auto_prefers_romanised():
+    from msst_api.v2m.pipeline import resolve_lyric_output_mode
+
+    # auto (the default) renders lyrics the DiffSinger front-end can read.
+    assert resolve_lyric_output_mode("zh", "auto") == "pinyin"
+    assert resolve_lyric_output_mode("zh", "") == "pinyin"
+    assert resolve_lyric_output_mode("ja", "auto") == "romaji"
+    assert resolve_lyric_output_mode("yue", "auto") == "jyutping"
+    assert resolve_lyric_output_mode("en", "auto") == "word"
+    # An explicit mode is always respected.
+    assert resolve_lyric_output_mode("zh", "hanzi") == "hanzi"
+    assert resolve_lyric_output_mode("ja", "kana") == "kana"
+
+
+
 def test_detect_language_uses_asr_and_falls_back(monkeypatch):
     from pathlib import Path
     from types import SimpleNamespace

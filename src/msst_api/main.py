@@ -11,6 +11,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
+from urllib.parse import quote
 
 import numpy as np
 import torch
@@ -511,7 +512,7 @@ def inference(
         files = {f"{name}.{output_format}": content for name, content in encoded.items()}
         files["manifest.json"] = json.dumps(metadata.model_dump(), indent=2).encode("utf-8")
         archive = build_zip(files)
-        headers = {"Content-Disposition": 'attachment; filename="stems.zip"'}
+        headers = {"Content-Disposition": _content_disposition("attachment", "stems.zip")}
         return Response(content=archive, media_type="application/zip", headers=headers)
     finally:
         if not settings.keep_temp:
@@ -751,7 +752,9 @@ async def rvc_inference(request: Request):
 
         content, media_type = encode_audio_dynamic(converted, sample_rate, output_format)
         headers = {
-            "Content-Disposition": f'inline; filename="output.{output_format}"',
+            "Content-Disposition": _content_disposition(
+                "inline", f"output.{output_format}"
+            ),
             "X-RVC-Model": voice.name,
             "X-RVC-Sample-Rate": str(sample_rate),
             "X-RVC-F0-Method": params.f0_method,
@@ -1155,7 +1158,7 @@ async def v2m_inference(request: Request):
         files = dict(outputs)
         files["manifest.json"] = json.dumps(metadata.model_dump(), indent=2).encode("utf-8")
         archive = build_zip(files)
-        headers = {"Content-Disposition": f'attachment; filename="{output_key}.zip"'}
+        headers = {"Content-Disposition": _content_disposition("attachment", f"{output_key}.zip")}
         return Response(content=archive, media_type="application/zip", headers=headers)
     finally:
         if not settings.keep_temp:
@@ -1217,7 +1220,7 @@ async def v2m_slice(request: Request):
         return Response(
             content=archive,
             media_type="application/zip",
-            headers={"Content-Disposition": 'attachment; filename="chunks.zip"'},
+            headers={"Content-Disposition": _content_disposition("attachment", "chunks.zip")},
         )
     finally:
         if not settings.keep_temp:
@@ -1358,9 +1361,31 @@ def _header_safe(value: str) -> str:
         value.encode("latin-1")
         return value
     except UnicodeEncodeError:
-        from urllib.parse import quote
-
         return quote(value)
+
+
+def _content_disposition(disposition: str, filename: str) -> str:
+    """Build an RFC 6266 ``Content-Disposition`` header value.
+
+    HTTP headers are latin-1, so a name with non-ASCII characters (e.g. a CJK
+    upload name) cannot be placed directly in the plain ``filename`` parameter.
+    Emit an ASCII-sanitised ``filename`` fallback plus an RFC 5987 ``filename*``
+    carrying the UTF-8 percent-encoded real name.
+    """
+
+    # Take the basename and drop control characters (incl. CR/LF, so the value
+    # cannot inject extra headers) and quotes that would end the parameter.
+    name = str(filename).replace("\\", "/").rsplit("/", 1)[-1].strip()
+    name = "".join(ch for ch in name if ch >= " " and ch != "\x7f").replace('"', "")
+    if not name:
+        name = "download"
+    ascii_name = name.encode("ascii", "replace").decode("ascii").replace("?", "_")
+    if ascii_name == name:
+        return f'{disposition}; filename="{ascii_name}"'
+    return (
+        f'{disposition}; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(name, safe='')}"
+    )
 
 
 def _build_svs_request(form) -> SVSRequest:  # noqa: ANN001
@@ -1484,7 +1509,9 @@ async def diffsinger_inference(request: Request):
                 files[f"{ustx_path.stem}.{output_format}"] = content
             archive = build_zip(files)
             headers = {
-                "Content-Disposition": f'attachment; filename="{ustx_path.stem}.zip"',
+                "Content-Disposition": _content_disposition(
+                    "attachment", f"{ustx_path.stem}.zip"
+                ),
                 "X-SVS-Model": _header_safe(voice.id),
                 "X-SVS-Language": result.language,
             }
@@ -1496,7 +1523,9 @@ async def diffsinger_inference(request: Request):
             result.samples, result.sample_rate, fmt=output_format, subtype=bit_depth
         )
         headers = {
-            "Content-Disposition": f'inline; filename="output.{output_format}"',
+            "Content-Disposition": _content_disposition(
+                "inline", f"output.{output_format}"
+            ),
             "X-SVS-Model": _header_safe(voice.id),
             "X-SVS-Language": result.language,
             "X-SVS-Sample-Rate": str(result.sample_rate),
@@ -1540,7 +1569,9 @@ async def diffsinger_pitch(request: Request):
                 status_code=500, detail=f"DiffSinger pitch generation failed: {error}"
             ) from error
         headers = {
-            "Content-Disposition": f'inline; filename="{ustx_path.stem}.pitd.ustx"',
+            "Content-Disposition": _content_disposition(
+                "inline", f"{ustx_path.stem}.pitd.ustx"
+            ),
             "X-SVS-Model": _header_safe(voice.id),
             "X-SVS-Language": result.language,
             "X-SVS-Elapsed": f"{time.time() - started:.3f}",

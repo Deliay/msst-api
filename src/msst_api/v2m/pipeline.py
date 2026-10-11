@@ -79,6 +79,33 @@ AUTO_LANGUAGE_VALUES = {"", "auto", "detect", "autodetect", "auto-detect", "gues
 #: Languages the vendored lyric pipeline (LFA / TiFA / HFA G2P) can process.
 SUPPORTED_PIPELINE_LANGUAGES = ("zh", "en", "ja", "yue")
 
+#: Romanised lyric output preferred in "auto" mode, per language. These are the
+#: tokens the DiffSinger front-end consumes directly, so a v2m -> DiffSinger
+#: round-trip (``/api/v2m/inference`` -> ``/api/diffsinger/inference``) needs no
+#: hanzi/kana -> pinyin/romaji conversion.
+_AUTO_LYRIC_OUTPUT_MODES = {
+    "zh": "pinyin",
+    "zh-pinyin": "pinyin",
+    "ja": "romaji",
+    "yue": "jyutping",
+    "en": "word",
+}
+
+
+def resolve_lyric_output_mode(language: str, mode: str | None) -> str:
+    """Resolve ``lyric_output_mode``.
+
+    ``"auto"`` (the default) prefers romanised lyrics -- pinyin for Mandarin,
+    Jyutping for Cantonese, romaji for Japanese -- so the score can be fed back
+    into the DiffSinger front-end without a hanzi -> pinyin step. An explicit
+    mode (e.g. ``"hanzi"``/``"kana"``) is always respected.
+    """
+
+    value = (mode or "").strip().lower()
+    if value in {"", "auto", "automatic", "detect", "default"}:
+        return _AUTO_LYRIC_OUTPUT_MODES.get((language or "").strip().lower(), "auto")
+    return value
+
 #: Qwen3-ASR returns canonical names (e.g. ``"Chinese"``); map them onto the
 #: pipeline's language codes.  Names outside this map are unsupported.
 _QWEN_LANGUAGE_TO_CODE = {
@@ -242,6 +269,9 @@ def run_v2m_pipeline(
             "notes will be extracted without lyrics.",
             language,
         )
+    # "auto" => romanised lyrics (pinyin/jyutping/romaji) so the output score is
+    # directly usable by the DiffSinger front-end.
+    lyric_output_mode = resolve_lyric_output_mode(language, request.lyric_output_mode)
     device = request.device or settings.device
 
     game_dir = str(v2m.resolve_path(request.game_model, request.source))
@@ -276,7 +306,7 @@ def run_v2m_pipeline(
         asr_model_path=qwen_path,
         ts=[2.0, 4.0, 6.0],
         language=language,
-        lyric_output_mode=request.lyric_output_mode,
+        lyric_output_mode=lyric_output_mode,
         original_lyrics=request.original_lyrics,
         output_dir=output_dir,
         output_formats=request.output_formats,
@@ -327,4 +357,12 @@ def cleanup(path: Path) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
-__all__ = ["V2MRequest", "SUPPORTED_OUTPUT_FORMATS", "run_v2m_pipeline", "cleanup", "V2MError", "ASRError"]
+__all__ = [
+    "V2MRequest",
+    "SUPPORTED_OUTPUT_FORMATS",
+    "resolve_lyric_output_mode",
+    "run_v2m_pipeline",
+    "cleanup",
+    "V2MError",
+    "ASRError",
+]
