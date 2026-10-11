@@ -199,6 +199,60 @@ def test_onnx_cuda_provider_uses_memory_frugal_arena():
         assert heuristic[0][1]["cudnn_conv_algo_search"] == "HEURISTIC"
 
 
+class _RecordingSession:
+    def __init__(self, outputs):
+        self.outputs = outputs
+        self.feeds = []
+
+    def run(self, _output_names, feed):
+        self.feeds.append(feed)
+        return self.outputs
+
+
+def test_game_infer_batch_skips_dur2bd_for_single_duration():
+    """A one-word chunk must not call dur2bd (its ReduceSum gets a 0 axis on CUDA)."""
+    from msst_api.v2m._vendor.inference.game.onnx_runtime import GameOnnxModel
+
+    batch, frames, channels = 2, 6, 3
+    mask_t = np.ones((batch, frames), dtype=bool)
+
+    model = GameOnnxModel.__new__(GameOnnxModel)
+    model.loop = False
+    model.timestep = 0.02
+    model._sessions = {
+        "encoder": _RecordingSession(
+            [
+                np.zeros((batch, frames, channels), np.float32),
+                np.zeros((batch, frames, channels), np.float32),
+                mask_t,
+            ]
+        ),
+        "dur2bd": _RecordingSession([np.zeros((1, frames), bool)]),
+        "segmenter": _RecordingSession([np.zeros((batch, frames), bool)]),
+        "bd2dur": _RecordingSession(
+            [np.zeros((batch, 2), np.float32), np.ones((batch, 2), bool)]
+        ),
+        "estimator": _RecordingSession(
+            [np.zeros((batch, 2), bool), np.zeros((batch, 2), np.float32)]
+        ),
+    }
+
+    results = model.infer_batch(
+        waveforms=np.zeros((batch, 64), np.float32),
+        durations=np.ones(batch, np.float32),
+        # item 0 has a single word; item 1 has two.
+        known_durations=np.array([[1.0, 0.0], [2.0, 2.0]], np.float32),
+        boundary_threshold=0.2,
+        boundary_radius=1,
+        score_threshold=0.2,
+    )
+
+    feeds = model._sessions["dur2bd"].feeds
+    assert len(feeds) == 1  # only the two-word item
+    assert feeds[0]["durations"].shape == (1, 2)
+    assert len(results) == batch
+
+
 def test_to_asr_rate_resamples_to_16k():
     from msst_api.v2m._vendor.inference.API.asr_api import ASR_SAMPLE_RATE, _to_asr_rate
 

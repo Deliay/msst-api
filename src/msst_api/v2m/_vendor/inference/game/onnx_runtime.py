@@ -83,7 +83,14 @@ class GameOnnxModel:
             known_boundaries = np.zeros_like(mask_t, dtype=bool)
             for idx in range(batch_size):
                 valid = known_durations[idx][known_durations[idx] > 0]
-                if len(valid) == 0:
+                # ``dur2bd`` slices the first duration off before marking the
+                # *interior* segment boundaries, so it needs at least two
+                # entries.  With a single word there is no interior boundary and
+                # the slice yields a length-0 axis; the CUDA ReduceSum rejects
+                # that ("Can't reduce on dim with value of 0 ... input_shape:
+                # {1,T,0}"), while the CPU kernel tolerates it and returns
+                # all-False -- so skip it and keep the zeroed known_boundaries.
+                if valid.size < 2:
                     continue
                 kb = self._sessions["dur2bd"].run(
                     None,
