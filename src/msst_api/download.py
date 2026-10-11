@@ -350,6 +350,22 @@ def download_snapshot(
         shutil.rmtree(staging, ignore_errors=True)
 
 
+def download_file(
+    url: str,
+    dest: Path,
+    *,
+    expected_size: int | None = None,
+    expected_sha: str | None = None,
+    settings: Settings | None = None,
+) -> Path:
+    """Download ``url`` to ``dest`` and verify size/sha256 when provided."""
+
+    settings = settings or get_settings()
+    path = download_url(url, dest, settings)
+    _verify(path, expected_size, expected_sha, settings)
+    return path
+
+
 def download_url(url: str, dest: Path, settings: Settings | None = None) -> Path:
     """Download an arbitrary URL to ``dest`` (used for ad-hoc configs/weights)."""
 

@@ -273,9 +273,10 @@ Two capabilities are exposed, backed by **different engines**:
 | `streaming_asr` | `WS /api/asr/streaming` | Qwen3-ASR only |
 
 Model bundles live under `MSST_ASR_MODEL_DIR` (default `<MSST_MODEL_DIR>/asr`).
-Qwen3-ASR is downloaded from the Hub on first use; PinyinASR / RomajiASR ONNX
-bundles are typically placed there directly (or fetched via a custom
-`MSST_ASR_CATALOG`).
+Qwen3-ASR is downloaded from the Hub on first use, and the PinyinASR /
+RomajiASR ONNX bundles are downloaded from their GitHub release assets
+(`model_onnx.zip`) and unpacked automatically. You can also place the bundles
+there directly or fetch them via a custom `MSST_ASR_CATALOG`.
 
 ### 1. List models
 

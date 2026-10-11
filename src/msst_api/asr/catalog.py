@@ -8,11 +8,10 @@ Models are catalogued by *kind* (engine family) and *tasks*:
 
 The catalog is intentionally data-driven: operators can add or override
 entries by pointing ``MSST_ASR_CATALOG`` at a JSON file (same shape as
-``{"models": [...]}``).  Qwen3-ASR bundles are fetched from the Hub on first
-use; the Pinyin/Romaji ONNX bundles are typically placed in
-``MSST_ASR_MODEL_DIR`` (or fetched from a mirror configured in a custom
-catalog), because their official weights are distributed separately from the
-training repositories.
+``{"models": [...]}``).  Qwen3-ASR bundles are fetched from the Hub, and the
+PinyinASR / RomajiASR ONNX bundles are fetched from their GitHub release assets
+(``model_onnx.zip``) on first use; either can still be placed manually under
+``MSST_ASR_MODEL_DIR`` or fetched from a mirror defined in a custom catalog.
 """
 
 from __future__ import annotations
@@ -71,7 +70,14 @@ BUNDLED_MODELS: list[ModelEntry] = [
         tasks=("transcribe",),
         languages=("zh",),
         dir_name="pinyinASR",
-        required_files=(),
+        required_globs=("*.onnx", "*vocab*.json"),
+        archives=(
+            {
+                "url": "https://github.com/Xiantaidu/PinyinASR/releases/download/v1.0.0/model_onnx.zip",
+                "size": 176065118,
+                "sha256": "8d9dafe94c4a50593a93130698e28a6330740d1b67f09740841acf1964b73739",
+            },
+        ),
         extra={"repo": "https://github.com/Xiantaidu/PinyinASR"},
     ),
     ModelEntry(
@@ -84,7 +90,14 @@ BUNDLED_MODELS: list[ModelEntry] = [
         tasks=("transcribe",),
         languages=("ja",),
         dir_name="romajiASR",
-        required_files=(),
+        required_globs=("*.onnx", "*vocab*.json"),
+        archives=(
+            {
+                "url": "https://github.com/Xiantaidu/RomajiASR/releases/download/v1.0.0/model_onnx.zip",
+                "size": 175792074,
+                "sha256": "8aa7e5c6f66cbe00018a33717531bd7f14e096fb6a7f0fcaf4e7c21623e62166",
+            },
+        ),
         extra={"repo": "https://github.com/Xiantaidu/RomajiASR"},
     ),
 ]

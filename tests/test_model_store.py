@@ -93,3 +93,56 @@ def test_custom_catalog_override(tmp_path):
     store.load_json(catalog, "asr", override=True)
     assert store.get("a").kind == "y"
     assert store.get("a").tasks == ("transcribe",)
+
+
+def test_required_globs_presence(tmp_path):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="ctc",
+        capability="asr",
+        kind="pinyin",
+        name="CTC",
+        dir_name="ctc",
+        required_globs=("*.onnx", "*vocab*.json"),
+    )
+    store.register([entry], "asr")
+    dest = store.path_for(entry)
+    dest.mkdir(parents=True)
+    (dest / "model_fp16_dynb.onnx").write_bytes(b"onnx")
+    assert store.is_downloaded(entry) is False  # vocab missing
+    (dest / "pinyin_vocab.json").write_text("{}")
+    assert store.is_downloaded(entry) is True
+
+
+def test_archive_extraction_finds_nested_bundle(tmp_path, monkeypatch):
+    import shutil
+    import zipfile
+
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="pinyin-asr",
+        capability="asr",
+        kind="pinyin",
+        name="CTC",
+        dir_name="pinyinASR",
+        required_globs=("*.onnx", "*vocab*.json"),
+        archives=({"url": "https://example.invalid/model_onnx.zip"},),
+    )
+    store.register([entry], "asr")
+
+    archive = tmp_path / "model_onnx.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("pinyinASR/model_fp16_dynb.onnx", b"onnx")
+        handle.writestr("pinyinASR/pinyin_vocab.json", "{}")
+
+    def fake_download_file(url, dest, **kwargs):
+        shutil.copy(archive, dest)
+        return dest
+
+    monkeypatch.setattr("msst_api.download.download_file", fake_download_file)
+    path = store.ensure(entry)
+    assert (path / "model_fp16_dynb.onnx").is_file()
+    assert (path / "pinyin_vocab.json").is_file()
+

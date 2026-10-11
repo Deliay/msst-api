@@ -258,8 +258,9 @@ curl -X POST http://localhost:8000/api/rvc/inference \
 | `streaming_asr`（流式） | `WS /api/asr/streaming` | 仅 Qwen3-ASR |
 
 模型包放在 `MSST_ASR_MODEL_DIR`（默认 `<MSST_MODEL_DIR>/asr`）。Qwen3-ASR 首次使用时
-从 Hub 自动下载；PinyinASR / RomajiASR 的 ONNX 包一般直接放入该目录（或通过自定义
-`MSST_ASR_CATALOG` 配置镜像源）。
+从 Hub 自动下载；PinyinASR / RomajiASR 的 ONNX 包则从其 GitHub Release 资产
+（`model_onnx.zip`）自动下载并解压。也可直接放入该目录，或通过自定义
+`MSST_ASR_CATALOG` 配置镜像源。
 
 ```bash
 curl http://localhost:8000/api/asr/models

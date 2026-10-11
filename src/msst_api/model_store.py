@@ -20,6 +20,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
+import tarfile
+import tempfile
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,8 +51,10 @@ class ModelEntry:
     languages: tuple[str, ...] = ()
     dir_name: str = ""
     required_files: tuple[str, ...] = ()
+    required_globs: tuple[str, ...] = ()
     snapshots: tuple[dict, ...] = ()
     single_files: tuple[dict, ...] = ()
+    archives: tuple[dict, ...] = ()
     extra: dict = field(default_factory=dict)
 
     @property
@@ -79,10 +86,36 @@ def _entry_from_dict(raw: dict, capability: str) -> ModelEntry:
         languages=tuple(raw.get("languages") or ()),
         dir_name=raw.get("dir_name", ""),
         required_files=tuple(raw.get("required_files") or ()),
+        required_globs=tuple(raw.get("required_globs") or ()),
         snapshots=tuple(raw.get("snapshots") or ()),
         single_files=tuple(raw.get("single_files") or ()),
+        archives=tuple(raw.get("archives") or ()),
         extra=dict(raw.get("extra") or {}),
     )
+
+
+def _safe_members(names, staging: Path):
+    for name in names:
+        target = (staging / name).resolve()
+        if not str(target).startswith(str(staging.resolve())):
+            raise DownloadError(f"Refusing to extract archive entry outside target: {name}")
+
+
+def _extract_archive(archive: Path, staging: Path) -> None:
+    """Extract a zip/tar archive into ``staging`` (guarding against traversal)."""
+
+    staging.mkdir(parents=True, exist_ok=True)
+    if zipfile.is_zipfile(archive):
+        with zipfile.ZipFile(archive) as handle:
+            _safe_members(handle.namelist(), staging)
+            handle.extractall(staging)
+        return
+    if tarfile.is_tarfile(archive):
+        with tarfile.open(archive) as handle:
+            _safe_members(handle.getnames(), staging)
+            handle.extractall(staging)
+        return
+    raise DownloadError(f"Unsupported archive format: {archive.name}")
 
 
 class ModelStore:
@@ -130,13 +163,22 @@ class ModelStore:
         return self.root(entry.capability) / entry.subdir
 
     # -- presence / download ----------------------------------------------
-    def is_downloaded(self, entry: ModelEntry) -> bool:
-        path = self.path_for(entry)
-        if not path.exists():
+    @staticmethod
+    def _bundle_present(path: Path, entry: ModelEntry) -> bool:
+        if not path.is_dir():
             return False
-        if entry.required_files:
-            return all((path / rel).is_file() for rel in entry.required_files)
-        return True
+        for rel in entry.required_files:
+            if not (path / rel).is_file():
+                return False
+        for pattern in entry.required_globs:
+            if not any(path.glob(pattern)):
+                return False
+        if entry.required_files or entry.required_globs:
+            return True
+        return any(path.iterdir())
+
+    def is_downloaded(self, entry: ModelEntry) -> bool:
+        return self._bundle_present(self.path_for(entry), entry)
 
     def ensure(self, entry: ModelEntry, source: str | None = None) -> Path:
         """Return the local path for ``entry``, downloading it when missing."""
@@ -146,9 +188,9 @@ class ModelStore:
             return dest
         self._download(entry, dest, source=source)
         if not self.is_downloaded(entry):
-            missing = [rel for rel in entry.required_files if not (dest / rel).is_file()]
             raise DownloadError(
-                f"Model {entry.id!r} downloaded but required files are missing: {missing}"
+                f"Model {entry.id!r} was downloaded but the expected files are missing "
+                f"under {dest}. Check the archive layout or set a custom catalog."
             )
         return dest
 
@@ -161,13 +203,24 @@ class ModelStore:
                 raise DownloadError(f"Invalid source: {source}")
             backends = ["huggingface", "modelscope"] if source == "huggingface" else ["modelscope", "huggingface"]
 
-        if not entry.snapshots and not entry.single_files:
+        if not entry.archives and not entry.snapshots and not entry.single_files:
             raise DownloadError(
                 f"No download source is configured for model {entry.id!r}. "
                 f"Place its files in {dest} or set MSST_{entry.capability.upper()}_CATALOG."
             )
 
         errors: list[str] = []
+
+        # Release-asset archives (e.g. GitHub release zips) are backend-agnostic.
+        for archive in entry.archives:
+            try:
+                self._download_archive(entry, dest, archive, settings)
+                logger.info("Model %s ready at %s", entry.id, dest)
+                return
+            except Exception as error:  # noqa: BLE001 - try next source
+                errors.append(f"archive:{archive.get('url')}: {error}")
+                logger.warning("Archive download failed for %s: %s", entry.id, error)
+
         for backend in backends:
             candidates = [s for s in entry.snapshots if s.get("backend") == backend]
             for candidate in candidates:
@@ -210,3 +263,58 @@ class ModelStore:
                 settings=settings,
             )
         logger.info("Model %s ready at %s", entry.id, dest)
+
+    # -- archive extraction ------------------------------------------------
+    def _download_archive(
+        self, entry: ModelEntry, dest: Path, archive: dict, settings: Settings
+    ) -> None:
+        """Download a zip/tar release asset and unpack the model bundle."""
+
+        from .download import download_file
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp_archive = dest.parent / f".{entry.subdir}{Path(archive.get('url', '')).suffix or '.zip'}"
+        try:
+            download_file(
+                archive["url"],
+                tmp_archive,
+                expected_size=archive.get("size"),
+                expected_sha=archive.get("sha256"),
+                settings=settings,
+            )
+            staging = Path(tempfile.mkdtemp(prefix=".unpack-", dir=str(dest.parent)))
+            try:
+                _extract_archive(tmp_archive, staging)
+                root = self._locate_bundle_root(staging, entry)
+                if dest.exists():
+                    shutil.rmtree(dest, ignore_errors=True)
+                if root == staging:
+                    os.replace(staging, dest)
+                else:
+                    os.replace(root, dest)
+                    shutil.rmtree(staging, ignore_errors=True)
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+        finally:
+            tmp_archive.unlink(missing_ok=True)
+
+    @staticmethod
+    def _locate_bundle_root(staging: Path, entry: ModelEntry) -> Path:
+        """Find the shallowest directory that holds the expected bundle."""
+
+        candidates = [staging]
+        candidates.extend(sorted((p for p in staging.rglob("*") if p.is_dir()), key=lambda p: len(p.parts)))
+        if entry.required_files or entry.required_globs:
+            for candidate in candidates:
+                if ModelStore._bundle_present(candidate, entry):
+                    return candidate
+        # No explicit requirement: descend through a single wrapping folder.
+        while True:
+            children = list(staging.iterdir())
+            dirs = [child for child in children if child.is_dir()]
+            files = [child for child in children if child.is_file()]
+            if len(dirs) == 1 and not files:
+                staging = dirs[0]
+                continue
+            return staging
+
