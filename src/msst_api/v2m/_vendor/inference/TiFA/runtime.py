@@ -61,6 +61,13 @@ class TifaModel:
         names = [output.name for output in session.get_outputs()]
         return dict(zip(names, session.run(None, feed)))
 
+    def shutdown(self) -> None:
+        """Drop the ONNX sessions so the CUDA arena is released on eviction."""
+
+        self.sessions.clear()
+
+    release = shutdown
+
 
 _TIFA_MODEL_CACHE: dict[tuple[str, str], TifaModel] = {}
 

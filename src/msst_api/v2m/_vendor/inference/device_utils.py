@@ -76,7 +76,13 @@ def resolve_onnx_providers(
     available = set(ort.get_available_providers())
     if "CUDAExecutionProvider" in available:
         logger.info("[%s] Using CUDAExecutionProvider.", label)
-        return "cuda", ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        # kSameAsRequested avoids the BFC arena rounding each allocation up to
+        # the next power of two (kNextPowerOfTwo), which otherwise inflates
+        # peak VRAM for the large attention buffers in GAME/TiFA and can OOM.
+        return "cuda", [
+            ("CUDAExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"}),
+            "CPUExecutionProvider",
+        ]
 
     logger.info(
         "[%s] CUDAExecutionProvider unavailable; falling back to CPUExecutionProvider.",

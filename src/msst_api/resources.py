@@ -81,7 +81,31 @@ class SharedModelCache:
             self._evict_locked()
         return obj
 
+    def reserve(self, count: int = 1) -> None:
+        """Release resident models so ``count`` more can be loaded.
+
+        Called *before* constructing a new model so the previous one is freed
+        first -- this keeps the ``MSST_MAX_LOADED_MODELS`` budget without a
+        transient overlap of the old and new models on the accelerator.
+        """
+
+        freed = False
+        with self._lock:
+            keep = max(0, self._max_loaded - max(1, int(count)))
+            while len(self._cache) > keep:
+                _, entry = self._cache.popitem(last=False)
+                logger.info(
+                    "Evicting %s model %s to respect MSST_MAX_LOADED_MODELS",
+                    entry.namespace,
+                    entry.label,
+                )
+                self._close(entry)
+                freed = True
+        if freed:
+            _release_accelerator_cache()
+
     def _evict_locked(self) -> None:
+        freed = False
         while len(self._cache) > self._max_loaded:
             _, entry = self._cache.popitem(last=False)
             logger.info(
@@ -90,6 +114,9 @@ class SharedModelCache:
                 entry.label,
             )
             self._close(entry)
+            freed = True
+        if freed:
+            _release_accelerator_cache()
 
     @staticmethod
     def _close(entry: _Entry) -> None:
@@ -120,3 +147,29 @@ class SharedModelCache:
                 entries = [self._cache.pop(key) for key in keys]
         for entry in entries:
             self._close(entry)
+        if entries:
+            _release_accelerator_cache()
+
+
+def _release_accelerator_cache() -> None:
+    """Best-effort return of freed torch/CUDA memory to the driver.
+
+    Closing an ONNX session (or dropping a torch model) releases references, but
+    the GPU allocator may keep the blocks cached; an explicit collect + empty
+    cache avoids the next model inheriting the previous one's footprint.
+    """
+
+    try:
+        import gc
+
+        gc.collect()
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:  # noqa: BLE001 - torch optional / not on CUDA
+        pass

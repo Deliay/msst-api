@@ -99,6 +99,9 @@ def get_or_load(
         cached = shared.get(key)
         if cached is not None:
             return cached
+        # Release an older model *before* building this one so two models never
+        # overlap on the GPU (honours MSST_MAX_LOADED_MODELS).
+        shared.reserve()
         model = builder()
         return shared.put(key, model, namespace=namespace, label=label, closer=closer)
 

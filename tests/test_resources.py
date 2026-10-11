@@ -80,3 +80,29 @@ def test_inference_slot_is_reentrant_across_threads():
         assert not started.wait(0.2)
     thread.join(timeout=5)
     assert order == ["w-enter", "w-exit"]
+
+
+def test_reserve_frees_room_before_load():
+    cache = SharedModelCache(max_loaded_models=1, max_concurrency=1)
+    a = _Closable()
+    cache.put(("a",), a, namespace="asr", label="a", closer=lambda o: o.close())
+    # Reserve room for the next model: the resident one is closed immediately,
+    # *before* the new model is built (no transient overlap).
+    cache.reserve()
+    assert a.closed is True
+    assert cache.loaded() == []
+
+    b = _Closable()
+    cache.put(("b",), b, namespace="v2m", label="b", closer=lambda o: o.close())
+    assert cache.loaded() == ["b"]
+
+
+def test_reserve_keeps_room_for_budget():
+    cache = SharedModelCache(max_loaded_models=3, max_concurrency=1)
+    objs = [_Closable() for _ in range(3)]
+    for i, obj in enumerate(objs):
+        cache.put((i,), obj, namespace="msst", label=str(i), closer=lambda o: o.close())
+    # Budget 3, reserving one slot must leave room for 2 resident models.
+    cache.reserve()
+    assert cache.loaded() == ["1", "2"]
+    assert objs[0].closed is True and objs[1].closed is False

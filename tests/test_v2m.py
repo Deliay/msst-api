@@ -177,3 +177,16 @@ def test_v2m_pipeline_no_lyrics_end_to_end(monkeypatch, tmp_path):
     assert outputs["vocal.mid"][:4] == b"MThd"
 
 
+
+
+def test_onnx_cuda_provider_uses_memory_frugal_arena():
+    from msst_api.v2m._vendor.inference import device_utils
+
+    assert device_utils.resolve_onnx_providers("cpu") == ("cpu", ["CPUExecutionProvider"])
+    if device_utils._cuda_provider_available():
+        name, providers = device_utils.resolve_onnx_providers("cuda")
+        assert name == "cuda"
+        assert isinstance(providers[0], tuple)
+        assert providers[0][0] == "CUDAExecutionProvider"
+        # Avoid ORT's kNextPowerOfTwo arena rounding, which inflates VRAM.
+        assert providers[0][1]["arena_extend_strategy"] == "kSameAsRequested"

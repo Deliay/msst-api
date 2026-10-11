@@ -129,6 +129,8 @@ class ASRManager:
             cached = self._cache.get(spec.key)
             if cached is not None:
                 return cached
+            # Free the previously loaded model before building this one.
+            self._cache.reserve()
             try:
                 engine = build_engine(spec.kind, spec.path, spec.device, self.settings)
             except Exception as error:  # noqa: BLE001
@@ -229,6 +231,7 @@ class ASRManager:
             cached = self._cache.get(spec.key)
             if cached is not None:
                 return cached
+            self._cache.reserve()
             try:
                 model = Qwen3ASRVLLMStreamingModel(Path(path), device, self.settings)
             except Exception as error:  # noqa: BLE001
