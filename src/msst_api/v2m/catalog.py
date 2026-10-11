@@ -8,21 +8,22 @@ Each entry describes one ONNX bundle used by the pipeline:
 * ``rmvpe``  -- RMVPE pitch estimator (optional; USTX/VSQX pitch curves).
 
 Most weights are distributed as GitHub release assets rather than Hub
-snapshots.  GAME, HubertFA and kashi-g2p are downloaded (and unpacked) from
-their release archives on first use; RMVPE is not downloaded at all -- the
-v2m pipeline reuses the RVC/Applio RMVPE predictor by default
-(``MSST_V2M_RMVPE_BACKEND=rvc``).  TiFA's upstream release only ships the
-PyTorch model, so the ONNX aligner graphs must be supplied out of band (place
-them in ``MSST_V2M_MODEL_DIR/tifa-1.0-onnx`` or point ``MSST_V2M_CATALOG`` at an
-ONNX bundle).
+snapshots.  All of them download on first use: GAME, HubertFA and kashi-g2p are
+unpacked from their release archives, and the TiFA ONNX graphs are exported from
+openvpi's PyTorch release via the vendored TIFA ``deploy`` code (see
+:mod:`msst_api.v2m.tifa_export`).  RMVPE is not downloaded at all -- the v2m
+pipeline reuses the RVC/Applio RMVPE predictor by default
+(``MSST_V2M_RMVPE_BACKEND=rvc``).
 
 GitHub downloads go through ``MSST_GITHUB_PROXY`` (default ``https://ghfast.top/``).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..config import Settings, get_settings
-from ..model_store import ModelEntry, ModelStore
+from ..model_store import ModelEntry, ModelStore, register_prepare
 
 V2M_CAPABILITY = "v2m"
 
@@ -72,12 +73,20 @@ BUNDLED_MODELS: list[ModelEntry] = [
             "model.onnx",
         ),
         snapshots=(),
+        archives=(
+            {
+                "url": "https://github.com/openvpi/TIFA/releases/download/v1.0.0/TIFA-1.0-ST.zip",
+                "size": 150789526,
+                "sha256": "6da6832cd2cb981aae1ccc2d9330f8f7c085ce7977d1eb13bff63531d038a88b",
+            },
+        ),
+        prepare="tifa_export",
+        prepare_inputs=("model.pt", "config.yaml", "vocabulary.json"),
         extra={
             "repo": "https://github.com/openvpi/TIFA",
-            "pytorch_url": "https://github.com/openvpi/TIFA/releases/download/v1.0.0/TIFA-1.0-ST.zip",
-            "note": "The openvpi release ships the PyTorch model; this runtime needs "
-            "the exported ONNX graphs (config.json + 5 .onnx files). Place them here "
-            "or point a custom catalog at an ONNX bundle.",
+            "note": "The openvpi release ships the PyTorch model; the ONNX graphs "
+            "needed by this runtime are exported on first use via the vendored "
+            "TIFA deploy code (see MSST_V2M_TIFA_OPSET).",
         },
     ),
     ModelEntry(
@@ -132,6 +141,21 @@ BUNDLED_MODELS: list[ModelEntry] = [
         extra={"repo": "https://github.com/Xiantaidu/kashi-g2p"},
     ),
 ]
+
+
+def _prepare_tifa_export(entry: ModelEntry, dest: Path, settings: Settings) -> None:
+    """Convert a downloaded TiFA PyTorch release into the ONNX bundle in place."""
+
+    from .tifa_export import export_tifa_onnx
+
+    export_tifa_onnx(
+        dest,
+        opset_version=settings.v2m_tifa_opset,
+        keep_source=settings.v2m_tifa_keep_source,
+    )
+
+
+register_prepare("tifa_export", _prepare_tifa_export)
 
 
 def build_store(settings: Settings | None = None) -> ModelStore:

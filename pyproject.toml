@@ -47,6 +47,18 @@ dependencies = [
     "click>=8.1",
     "pyopenjtalk>=0.4",            # Japanese G2P fallback
     "opencc-python-reimplemented>=0.1.7",  # traditional -> simplified (Cantonese)
+    # TiFA ONNX export: the vendored TIFA deploy code converts openvpi's PyTorch
+    # release into the ONNX graphs on first use (see v2m/tifa_export.py).
+    "lightning>=2.2,<3",
+    "g2pflow>=0.3.0,<0.4.0",
+    "onnx>=1.16",
+    "onnxslim>=0.1.40",
+    "loguru>=0.7",
+    "omegaconf>=2.3",
+    "einops>=0.7",
+    "colorednoise>=1.1",
+    "praat-parselmouth>=0.4",
+    "h5py>=3.10",
 ]
 
 [project.scripts]

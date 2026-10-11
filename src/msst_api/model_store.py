@@ -25,6 +25,7 @@ import shutil
 import tarfile
 import tempfile
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,6 +37,19 @@ logger = logging.getLogger("msst_api.model_store")
 
 class ModelAssetNotFound(KeyError):
     """Raised when a requested ASR / v2m model id is not in the catalog."""
+
+
+#: Post-download preparation steps (e.g. converting a PyTorch release into the
+#: ONNX bundle the runtime needs), keyed by the name referenced from a catalog
+#: entry's ``prepare`` field.  Registered by the capability packages so this
+#: module stays free of v2m/asr specifics.
+_PREPARE_HANDLERS: dict[str, Callable[["ModelEntry", Path, "Settings"], None]] = {}
+
+
+def register_prepare(name: str, handler: Callable[["ModelEntry", Path, "Settings"], None]) -> None:
+    """Register a named preparation step usable from ``ModelEntry.prepare``."""
+
+    _PREPARE_HANDLERS[name] = handler
 
 
 @dataclass(frozen=True)
@@ -55,6 +69,12 @@ class ModelEntry:
     snapshots: tuple[dict, ...] = ()
     single_files: tuple[dict, ...] = ()
     archives: tuple[dict, ...] = ()
+    #: Optional name of a registered post-download preparation step (see
+    #: :func:`register_prepare`), e.g. exporting ONNX from a PyTorch release.
+    prepare: str = ""
+    #: Files that, when already present, let the store skip the download and run
+    #: the ``prepare`` step directly (e.g. ``model.pt`` for a TiFA checkpoint).
+    prepare_inputs: tuple[str, ...] = ()
     extra: dict = field(default_factory=dict)
 
     @property
@@ -90,6 +110,8 @@ def _entry_from_dict(raw: dict, capability: str) -> ModelEntry:
         snapshots=tuple(raw.get("snapshots") or ()),
         single_files=tuple(raw.get("single_files") or ()),
         archives=tuple(raw.get("archives") or ()),
+        prepare=raw.get("prepare", ""),
+        prepare_inputs=tuple(raw.get("prepare_inputs") or ()),
         extra=dict(raw.get("extra") or {}),
     )
 
@@ -186,13 +208,34 @@ class ModelStore:
         dest = self.path_for(entry)
         if self.is_downloaded(entry):
             return dest
-        self._download(entry, dest, source=source)
+        # A preparation step (e.g. TiFA PyTorch -> ONNX) may be runnable from
+        # files already on disk, so only download when its inputs are absent.
+        if not self._prepare_inputs_present(entry, dest):
+            self._download(entry, dest, source=source)
+        self._run_prepare(entry, dest)
         if not self.is_downloaded(entry):
             raise DownloadError(
                 f"Model {entry.id!r} was downloaded but the expected files are missing "
                 f"under {dest}. Check the archive layout or set a custom catalog."
             )
         return dest
+
+    @staticmethod
+    def _prepare_inputs_present(entry: ModelEntry, dest: Path) -> bool:
+        if not entry.prepare or not entry.prepare_inputs:
+            return False
+        return all((dest / rel).is_file() for rel in entry.prepare_inputs)
+
+    def _run_prepare(self, entry: ModelEntry, dest: Path) -> None:
+        if not entry.prepare:
+            return
+        handler = _PREPARE_HANDLERS.get(entry.prepare)
+        if handler is None:
+            raise DownloadError(
+                f"Unknown preparation step {entry.prepare!r} for model {entry.id!r}."
+            )
+        logger.info("Running preparation step %r for %s", entry.prepare, entry.id)
+        handler(entry, dest, self.settings)
 
     def _download(self, entry: ModelEntry, dest: Path, *, source: str | None) -> None:
         settings = self.settings

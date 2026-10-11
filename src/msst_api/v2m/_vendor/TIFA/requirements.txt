@@ -1,0 +1,29 @@
+# It is recommended to install PyTorch manually.
+# See instructions at https://pytorch.org/get-started/locally/
+
+click
+colorednoise
+dask
+einops>=0.7.0
+g2pflow>=0.3.0,<0.4.0
+h5py
+librosa>=0.10.0
+lightning
+loguru
+matplotlib
+numba
+numpy
+omegaconf
+onnx
+onnxscript
+onnxslim
+praat-parselmouth
+pydantic>=2.11,<3.0
+resampy
+scipy>=1.10.0
+sympy
+tensorboard
+tensorboardX
+textgrid
+torchmetrics
+tqdm

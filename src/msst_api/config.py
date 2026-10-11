@@ -128,6 +128,15 @@ class Settings:
     v2m_rmvpe_backend: str = field(
         default_factory=lambda: os.environ.get("MSST_V2M_RMVPE_BACKEND", "rvc").strip().lower()
     )
+    #: ONNX opset (18-20) used when exporting the TiFA aligner from its PyTorch
+    #: checkpoint. (``MSST_V2M_TIFA_OPSET``)
+    v2m_tifa_opset: int = field(
+        default_factory=lambda: _env_int("MSST_V2M_TIFA_OPSET", 18)
+    )
+    #: Keep ``model.pt`` after exporting the TiFA ONNX graphs. (``MSST_V2M_TIFA_KEEP_SOURCE``)
+    v2m_tifa_keep_source: bool = field(
+        default_factory=lambda: _env_bool("MSST_V2M_TIFA_KEEP_SOURCE", False)
+    )
 
     # --- Server ------------------------------------------------------------
     host: str = field(default_factory=lambda: os.environ.get("MSST_HOST", "0.0.0.0"))
@@ -234,6 +243,8 @@ class Settings:
             self.asr_streaming_backend = "auto"
         if self.v2m_rmvpe_backend not in {"rvc", "onnx"}:
             self.v2m_rmvpe_backend = "rvc"
+        if not 18 <= self.v2m_tifa_opset <= 20:
+            self.v2m_tifa_opset = 18
         if self.download_backend not in {"modelscope", "huggingface", "auto"}:
             self.download_backend = "auto"
 

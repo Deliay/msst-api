@@ -41,7 +41,10 @@ and model artifacts. It does not redistribute model weights.
   DirectML. The Qwen3-ASR GGUF/llama.cpp runtime is **not** vendored; Qwen3-ASR
   runs through the official `qwen-asr` package (see below).
 - The vendor tree also embeds the following upstream components:
-  - TiFA — https://github.com/openvpi/TIFA (MIT)
+  - TiFA — https://github.com/openvpi/TIFA (MIT). The TIFA `deployment` /
+    `inference` / `lib` / `modules` code is additionally vendored under
+    `src/msst_api/v2m/_vendor/TIFA/` so the ONNX aligner graphs can be exported
+    from openvpi's PyTorch release on first use (see `v2m/tifa_export.py`).
   - GAME — https://github.com/openvpi/GAME (MIT)
   - HubertFA — https://github.com/wolfgitpr/HubertFA
   - LyricFA — https://github.com/wolfgitpr/LyricFA
@@ -64,9 +67,10 @@ and model artifacts. It does not redistribute model weights.
 ## Vocal2Midi model weights (downloaded at runtime)
 
 - GAME ONNX — https://github.com/openvpi/GAME (model files MIT; see the release).
-- TiFA ONNX — exported from https://github.com/openvpi/TIFA (MIT code). The
-  TIFA **model files** are released under **CC BY-NC-SA 4.0** (non-commercial);
-  respect that license when deploying the aligner.
+- TiFA ONNX — exported on first use from the PyTorch release of
+  https://github.com/openvpi/TIFA (MIT export code). The TIFA **model files** are
+  released under **CC BY-NC-SA 4.0** (non-commercial); respect that license when
+  deploying the aligner.
 - HubertFA ONNX — https://github.com/wolfgitpr/HubertFA.
 - kashi-g2p ONNX + lexicon — https://github.com/Xiantaidu/kashi-g2p
   (Apache-2.0; the lexicon bundle is CC BY-SA 4.0).

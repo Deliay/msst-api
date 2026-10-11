@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from msst_api.config import Settings
-from msst_api.model_store import ModelAssetNotFound, ModelEntry, ModelStore
+from msst_api.model_store import (
+    ModelAssetNotFound,
+    ModelEntry,
+    ModelStore,
+    register_prepare,
+)
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -145,4 +150,89 @@ def test_archive_extraction_finds_nested_bundle(tmp_path, monkeypatch):
     path = store.ensure(entry)
     assert (path / "model_fp16_dynb.onnx").is_file()
     assert (path / "pinyin_vocab.json").is_file()
+
+
+def test_prepare_step_runs_after_download(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="tifa-like",
+        capability="v2m",
+        kind="x",
+        name="Bundle",
+        dir_name="bundle",
+        required_files=("model.onnx", "config.json"),
+        archives=({"url": "https://example.invalid/source.zip"},),
+        prepare="test-prepare-after-download",
+        prepare_inputs=("source.pt",),
+    )
+    store.register([entry], "v2m")
+
+    def fake_archive(self, entry_, dest, archive, settings_):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "source.pt").write_bytes(b"pt")
+
+    monkeypatch.setattr(ModelStore, "_download_archive", fake_archive)
+
+    def handler(entry_, dest, settings_):
+        (dest / "model.onnx").write_bytes(b"onnx")
+        (dest / "config.json").write_text("{}")
+
+    register_prepare("test-prepare-after-download", handler)
+
+    path = store.ensure(entry)
+    assert (path / "model.onnx").is_file()
+    assert store.is_downloaded(entry) is True
+
+
+def test_prepare_uses_existing_inputs_without_download(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="tifa-like-2",
+        capability="v2m",
+        kind="x",
+        name="Bundle",
+        dir_name="bundle2",
+        required_files=("model.onnx",),
+        prepare="test-prepare-existing",
+        prepare_inputs=("source.pt",),
+    )
+    store.register([entry], "v2m")
+    dest = store.path_for(entry)
+    dest.mkdir(parents=True)
+    (dest / "source.pt").write_bytes(b"pt")
+
+    def boom(*args, **kwargs):  # pragma: no cover - must not be called
+        raise AssertionError("download should be skipped when prepare inputs exist")
+
+    monkeypatch.setattr(ModelStore, "_download", boom)
+    register_prepare(
+        "test-prepare-existing",
+        lambda entry_, dest_, settings_: (dest_ / "model.onnx").write_bytes(b"onnx"),
+    )
+
+    path = store.ensure(entry)
+    assert (path / "model.onnx").is_file()
+
+
+def test_unknown_prepare_step_raises(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    store = ModelStore(settings)
+    entry = ModelEntry(
+        id="bad-prepare",
+        capability="v2m",
+        kind="x",
+        name="Bundle",
+        dir_name="bundle3",
+        required_files=("model.onnx",),
+        prepare="no-such-step",
+        prepare_inputs=("source.pt",),
+    )
+    store.register([entry], "v2m")
+    dest = store.path_for(entry)
+    dest.mkdir(parents=True)
+    (dest / "source.pt").write_bytes(b"pt")
+    with pytest.raises(Exception):
+        store.ensure(entry)
 
