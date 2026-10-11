@@ -122,6 +122,12 @@ class Settings:
     v2m_catalog: Path | None = field(
         default_factory=lambda: _env_path_opt("MSST_V2M_CATALOG")
     )
+    #: Backend for the v2m pitch curve: ``rvc`` (reuse the RVC/Applio RMVPE
+    #: torch predictor, no extra download) or ``onnx`` (the RMVPE ONNX bundle).
+    #: (``MSST_V2M_RMVPE_BACKEND``)
+    v2m_rmvpe_backend: str = field(
+        default_factory=lambda: os.environ.get("MSST_V2M_RMVPE_BACKEND", "rvc").strip().lower()
+    )
 
     # --- Server ------------------------------------------------------------
     host: str = field(default_factory=lambda: os.environ.get("MSST_HOST", "0.0.0.0"))
@@ -199,6 +205,14 @@ class Settings:
     verify_download: bool = field(
         default_factory=lambda: _env_bool("MSST_VERIFY_DOWNLOAD", True)
     )
+    #: GitHub download proxy prefix. GitHub URLs are rewritten as
+    #: ``<proxy><github_url>`` (e.g. ``https://ghfast.top/https://github.com/...``).
+    #: Set to an empty string to disable. (``MSST_GITHUB_PROXY``)
+    github_proxy: str = field(
+        default_factory=lambda: os.environ.get(
+            "MSST_GITHUB_PROXY", "https://ghfast.top/"
+        ).strip()
+    )
 
     def __post_init__(self) -> None:
         self.model_dir = Path(self.model_dir).expanduser().resolve()
@@ -218,6 +232,8 @@ class Settings:
         self.v2m_model_dir = Path(self.v2m_model_dir).expanduser().resolve()
         if self.asr_streaming_backend not in {"auto", "vllm", "transformers"}:
             self.asr_streaming_backend = "auto"
+        if self.v2m_rmvpe_backend not in {"rvc", "onnx"}:
+            self.v2m_rmvpe_backend = "rvc"
         if self.download_backend not in {"modelscope", "huggingface", "auto"}:
             self.download_backend = "auto"
 

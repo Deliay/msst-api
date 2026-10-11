@@ -58,18 +58,12 @@ def extract_pitch(
     source: str | None = None,
     model_id: str = "rmvpe",
 ) -> dict:
-    from ._vendor.inference.API.rmvpe_api import RmvpeTranscriber
-
-    model_path = str(v2m.resolve_path(model_id, source))
     device = device or v2m.settings.device
+    model_path = ""
+    if v2m.settings.v2m_rmvpe_backend == "onnx":
+        model_path = str(v2m.resolve_path(model_id, source))
 
-    transcriber = runtime.get_or_load(
-        ("rmvpe", model_path, str(device).strip().lower() or "auto"),
-        namespace="v2m",
-        label=f"rmvpe:{Path(model_path).name}",
-        builder=lambda: RmvpeTranscriber(model_path, device=device),
-        closer=lambda model: model.shutdown(),
-    )
+    transcriber = runtime.build_rmvpe_transcriber(model_path, device)
     with runtime.inference_slot():
         result = transcriber.infer(np.asarray(waveform, dtype=np.float32), sample_rate)
     return {

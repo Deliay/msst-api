@@ -110,9 +110,9 @@ def test_v2m_notes_endpoint(v2m_client, monkeypatch):
     assert response.json()["count"] == 1
 
 
-def test_v2m_models_are_not_downloaded_by_default(v2m_client):
+def test_v2m_models_report_downloaded_flag(v2m_client):
     payload = v2m_client.get("/api/v2m/models").json()
-    assert all(m["downloaded"] is False for m in payload["models"])
+    assert all(isinstance(m["downloaded"], bool) for m in payload["models"])
 
 
 def test_v2m_slice_returns_chunk_zip(v2m_client):

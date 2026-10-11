@@ -82,8 +82,29 @@ def _apply_hf_endpoint(url: str, settings: Settings) -> str:
     return url
 
 
+_GITHUB_HOSTS = (
+    "https://github.com/",
+    "http://github.com/",
+    "https://raw.githubusercontent.com/",
+    "https://codeload.github.com/",
+    "https://objects.githubusercontent.com/",
+)
+
+
+def _apply_github_proxy(url: str, settings: Settings) -> str:
+    """Rewrite GitHub URLs to ``<proxy><url>`` when a proxy is configured."""
+
+    proxy = (settings.github_proxy or "").strip()
+    if not proxy or "github" not in url:
+        return url
+    if any(url.startswith(prefix) for prefix in _GITHUB_HOSTS):
+        return proxy.rstrip("/") + "/" + url
+    return url
+
+
 def _download_http(url: str, dest: Path, settings: Settings) -> Path:
     url = _apply_hf_endpoint(url, settings)
+    url = _apply_github_proxy(url, settings)
     headers = {"User-Agent": "msst-api/0.1"}
     if settings.hf_token and "huggingface" in url:
         headers["Authorization"] = f"Bearer {settings.hf_token}"
@@ -372,6 +393,7 @@ def download_url(url: str, dest: Path, settings: Settings | None = None) -> Path
     settings = settings or get_settings()
     dest = Path(dest)
     tmp = _atomic_target(dest)
+    url = _apply_github_proxy(_apply_hf_endpoint(url, settings), settings)
     headers = {"User-Agent": "msst-api/0.1"}
     timeout = (30.0, settings.download_timeout) if settings.download_timeout else None
     with requests.get(url, stream=True, timeout=timeout, headers=headers) as response:

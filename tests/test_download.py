@@ -4,7 +4,11 @@ from dataclasses import replace
 from pathlib import Path
 
 from msst_api.config import Settings
-from msst_api.download import _candidates_for, _derive_modelscope_sources
+from msst_api.download import (
+    _apply_github_proxy,
+    _candidates_for,
+    _derive_modelscope_sources,
+)
 
 
 def _settings(**kwargs) -> Settings:
@@ -58,3 +62,17 @@ def test_explicit_modelscope_source_is_kept() -> None:
     settings = _settings(modelscope_mirror=None)
     ms_source = {"backend": "modelscope", "repo_id": "org/repo", "file": "a.ckpt"}
     assert _derive_modelscope_sources([HF_SOURCE, ms_source], settings) == [ms_source]
+
+
+def test_github_proxy_prefixes_github_urls() -> None:
+    settings = _settings(github_proxy="https://ghfast.top/")
+    url = "https://github.com/openvpi/GAME/releases/download/v1.0.3/GAME-1.0.3-medium-onnx.zip"
+    assert _apply_github_proxy(url, settings) == f"https://ghfast.top/{url}"
+    # Non-GitHub URLs are untouched.
+    assert _apply_github_proxy("https://example.com/a.zip", settings) == "https://example.com/a.zip"
+
+
+def test_github_proxy_disabled_when_empty() -> None:
+    settings = _settings(github_proxy="")
+    url = "https://github.com/openvpi/GAME/releases/download/v1.0.3/x.zip"
+    assert _apply_github_proxy(url, settings) == url

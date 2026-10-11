@@ -178,24 +178,17 @@ def _extract_pitch_curve(
 ):
     """RMVPE pitch curve for USTX/VSQX export; None when not requested.
 
-    The transcriber is cached in-process and reused across pipeline runs --
-    recreating its DirectML session per song corrupts onnxruntime's DML
-    state and access-violates the process on the next song.
+    The transcriber is cached in the shared model cache and reused across
+    pipeline runs.  By default this reuses the RVC/Applio RMVPE predictor (see
+    :func:`msst_api.v2m.runtime.build_rmvpe_transcriber`).
     """
     if not (("ustx" in output_format_set or "vsqx" in output_format_set) and output_pitch_curve):
         return None
-    rmvpe_model = _resolve_rmvpe_path(rmvpe_model_path)
-    logger.info(f"[Hybrid Pipeline] Running RMVPE from: {rmvpe_model}")
+    logger.info("[Hybrid Pipeline] Running RMVPE pitch extraction")
 
     from msst_api.v2m import runtime
 
-    rmvpe = runtime.get_or_load(
-        ("rmvpe", rmvpe_model, str(device or "").strip().lower() or "auto"),
-        namespace="v2m",
-        label=f"rmvpe:{pathlib.Path(rmvpe_model).name}",
-        builder=lambda: RmvpeTranscriber(rmvpe_model, device=device),
-        closer=lambda model: model.shutdown(),
-    )
+    rmvpe = runtime.build_rmvpe_transcriber(rmvpe_model_path, device)
     with runtime.inference_slot():
         rmvpe_result = rmvpe.infer(waveform, sr, cancel_checker=cancel_checker)
     logger.info(f"[Hybrid Pipeline] RMVPE done. Frames={len(rmvpe_result.midi_pitch)} step={rmvpe_result.time_step_seconds:.4f}s")

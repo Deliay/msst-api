@@ -61,6 +61,17 @@ and model artifacts. It does not redistribute model weights.
 - PinyinASR — https://github.com/Xiantaidu/PinyinASR (Apache-2.0).
 - RomajiASR — https://github.com/Xiantaidu/RomajiASR (Apache-2.0).
 
+## Vocal2Midi model weights (downloaded at runtime)
+
+- GAME ONNX — https://github.com/openvpi/GAME (model files MIT; see the release).
+- TiFA ONNX — exported from https://github.com/openvpi/TIFA (MIT code). The
+  TIFA **model files** are released under **CC BY-NC-SA 4.0** (non-commercial);
+  respect that license when deploying the aligner.
+- HubertFA ONNX — https://github.com/wolfgitpr/HubertFA.
+- kashi-g2p ONNX + lexicon — https://github.com/Xiantaidu/kashi-g2p
+  (Apache-2.0; the lexicon bundle is CC BY-SA 4.0).
+- RMVPE (v2m pitch) reuses the RVC/Applio `rmvpe.pt` asset (see above).
+
 ## Pretrained weights
 
 Checkpoints are downloaded at runtime from the Hugging Face repository

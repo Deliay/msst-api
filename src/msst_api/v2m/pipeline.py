@@ -145,7 +145,7 @@ def run_v2m_pipeline(
     wants_pitch_curve = request.output_pitch_curve and any(
         fmt in {"ustx", "vsqx"} for fmt in request.output_formats
     )
-    if wants_pitch_curve:
+    if wants_pitch_curve and settings.v2m_rmvpe_backend == "onnx":
         rmvpe_path = str(v2m.resolve_path(request.rmvpe_model, request.source))
 
     kashi_g2p_path = ""

@@ -105,3 +105,35 @@ def get_or_load(
 
 def unload(namespace: str | None = None) -> None:
     cache().clear(namespace)
+
+
+def build_rmvpe_transcriber(model_path: str, device: str | None):
+    """Return a loaded RMVPE transcriber, reusing the RVC predictor by default."""
+
+    settings_obj = settings()
+    backend = getattr(settings_obj, "v2m_rmvpe_backend", "rvc") or "rvc"
+    if backend == "onnx":
+        from ._vendor.inference.API.rmvpe_api import RmvpeTranscriber
+
+        if not model_path:
+            raise RuntimeError(
+                "MSST_V2M_RMVPE_BACKEND=onnx requires an RMVPE .onnx model "
+                "(place it in MSST_V2M_MODEL_DIR/RMVPE/)."
+            )
+        return get_or_load(
+            ("rmvpe", "onnx", str(model_path), str(device or "")),
+            namespace="v2m",
+            label=f"rmvpe-onnx:{model_path}",
+            builder=lambda: RmvpeTranscriber(model_path, device=device),
+            closer=lambda model: model.shutdown(),
+        )
+
+    from .rmvpe import RvcRmvpeTranscriber
+
+    return get_or_load(
+        ("rmvpe", "rvc", str(device or "")),
+        namespace="v2m",
+        label="rmvpe:rvc",
+        builder=lambda: RvcRmvpeTranscriber(device, settings_obj),
+        closer=lambda model: model.shutdown(),
+    )

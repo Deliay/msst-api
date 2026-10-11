@@ -285,6 +285,12 @@ float32 小端 PCM（或 `format=pcm_s16le` 的 int16）二进制帧；每个音
 `POST /api/v2m/inference` 复刻 Vocal2Midi 流程——切片 → ASR → 强制对齐（TiFA，或
 HubertFA）→ GAME 音符提取 → 量化 → 导出——并以 zip 返回所选产物及 `manifest.json`。
 
+模型包放在 `MSST_V2M_MODEL_DIR`（默认 `<MSST_MODEL_DIR>/v2m`）。GAME、HubertFA、
+kashi-g2p 首次使用时从其 GitHub Release 资产自动下载（经 `MSST_GITHUB_PROXY`，默认
+`https://ghfast.top/`）；音高曲线复用 RVC/Applio 的 RMVPE 预测器
+（`MSST_V2M_RMVPE_BACKEND=rvc`）。TiFA 上游发布的是 PyTorch 模型，其 ONNX 图需自行
+放置（或通过自定义 `MSST_V2M_CATALOG` 提供）；也可改用 `alignment_engine=hfa`。
+
 ```bash
 curl -X POST http://localhost:8000/api/v2m/inference \
   -F "audio=@vocal.wav" \
@@ -333,6 +339,8 @@ curl -X POST http://localhost:8000/api/v2m/inference \
 | `MSST_QWEN_ASR_DTYPE` | `bfloat16` | Qwen3-ASR 加载精度 |
 | `MSST_V2M_MODEL_DIR` | `<MSST_MODEL_DIR>/v2m` | **Vocal2Midi 模型包目录** |
 | `MSST_V2M_CATALOG` | 空 | 追加的 v2m 模型 JSON 目录 |
+| `MSST_V2M_RMVPE_BACKEND` | `rvc` | 音高曲线后端：`rvc`（复用 RVC RMVPE）/ `onnx` |
+| `MSST_GITHUB_PROXY` | `https://ghfast.top/` | GitHub 发布资产下载的前缀代理（留空则直连） |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |
 | `MSST_ALLOW_CPU` | `false` | 是否允许 CPU 推理（默认仅 GPU） |

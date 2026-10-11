@@ -338,6 +338,14 @@ repeatedly re-decoding a growing buffer with the transformers backend
 forced alignment (TiFA, or HubertFA) → GAME note extraction → quantization →
 export — and returns a zip of the requested artifacts plus a `manifest.json`.
 
+Model bundles live under `MSST_V2M_MODEL_DIR` (default `<MSST_MODEL_DIR>/v2m`).
+GAME, HubertFA and kashi-g2p are downloaded from their GitHub release assets on
+first use (through `MSST_GITHUB_PROXY`, default `https://ghfast.top/`); the
+pitch curve reuses the RVC/Applio RMVPE predictor (`MSST_V2M_RMVPE_BACKEND=rvc`).
+TiFA's upstream release is PyTorch-only, so its ONNX graphs must be placed here
+(or supplied via a custom `MSST_V2M_CATALOG`) — as an alternative, use
+`alignment_engine=hfa`.
+
 ```bash
 curl -X POST http://localhost:8000/api/v2m/inference \
   -F "audio=@vocal.wav" \
@@ -407,6 +415,8 @@ Each pipeline stage is also exposed on its own:
 | `MSST_QWEN_ASR_DTYPE` | `bfloat16` | dtype used to load Qwen3-ASR |
 | `MSST_V2M_MODEL_DIR` | `<MSST_MODEL_DIR>/v2m` | **Vocal2Midi model bundle directory** |
 | `MSST_V2M_CATALOG` | empty | Extra JSON catalog for v2m models |
+| `MSST_V2M_RMVPE_BACKEND` | `rvc` | Pitch-curve backend: `rvc` (reuse RVC RMVPE) / `onnx` |
+| `MSST_GITHUB_PROXY` | `https://ghfast.top/` | Prefix proxy for GitHub release downloads (empty = direct) |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |
 | `MSST_ALLOW_CPU` | `false` | Allow CPU inference (GPU-only by default) |

@@ -7,10 +7,16 @@ Each entry describes one ONNX bundle used by the pipeline:
 * ``hfa``    -- HubertFA phoneme forced aligner;
 * ``rmvpe``  -- RMVPE pitch estimator (optional; USTX/VSQX pitch curves).
 
-Most upstream weights are distributed as release assets rather than Hub
-snapshots, so ``snapshots`` is often empty: operators either drop the files in
-``MSST_V2M_MODEL_DIR`` or point ``MSST_V2M_CATALOG`` at a JSON catalog with the
-mirror of their choice.
+Most weights are distributed as GitHub release assets rather than Hub
+snapshots.  GAME, HubertFA and kashi-g2p are downloaded (and unpacked) from
+their release archives on first use; RMVPE is not downloaded at all -- the
+v2m pipeline reuses the RVC/Applio RMVPE predictor by default
+(``MSST_V2M_RMVPE_BACKEND=rvc``).  TiFA's upstream release only ships the
+PyTorch model, so the ONNX aligner graphs must be supplied out of band (place
+them in ``MSST_V2M_MODEL_DIR/tifa-1.0-onnx`` or point ``MSST_V2M_CATALOG`` at an
+ONNX bundle).
+
+GitHub downloads go through ``MSST_GITHUB_PROXY`` (default ``https://ghfast.top/``).
 """
 
 from __future__ import annotations
@@ -38,7 +44,13 @@ BUNDLED_MODELS: list[ModelEntry] = [
             "dur2bd.onnx",
             "bd2dur.onnx",
         ),
-        snapshots=(),
+        archives=(
+            {
+                "url": "https://github.com/openvpi/GAME/releases/download/v1.0.3/GAME-1.0.3-medium-onnx.zip",
+                "size": 179775226,
+                "sha256": "5b7a21e64c6310efac399f5d12838fffa70565be162436b5a4a65f290721e7d8",
+            },
+        ),
         extra={"repo": "https://github.com/openvpi/GAME"},
     ),
     ModelEntry(
@@ -60,7 +72,13 @@ BUNDLED_MODELS: list[ModelEntry] = [
             "model.onnx",
         ),
         snapshots=(),
-        extra={"repo": "https://github.com/openvpi/TIFA"},
+        extra={
+            "repo": "https://github.com/openvpi/TIFA",
+            "pytorch_url": "https://github.com/openvpi/TIFA/releases/download/v1.0.0/TIFA-1.0-ST.zip",
+            "note": "The openvpi release ships the PyTorch model; this runtime needs "
+            "the exported ONNX graphs (config.json + 5 .onnx files). Place them here "
+            "or point a custom catalog at an ONNX bundle.",
+        },
     ),
     ModelEntry(
         id="hubertfa",
@@ -72,7 +90,13 @@ BUNDLED_MODELS: list[ModelEntry] = [
         languages=("zh", "ja", "en"),
         dir_name="1218_hfa_model_new_dict",
         required_files=("model.onnx", "vocab.json", "config.json", "VERSION"),
-        snapshots=(),
+        archives=(
+            {
+                "url": "https://github.com/wolfgitpr/HubertFA/releases/download/v0.0.7/1218_hfa_model_new_dict.zip",
+                "size": 256589553,
+                "sha256": "48bd6dbcc293e47cc6cbcc556baf575e3d91d61d0ac88ddeccd6098f8f346fa2",
+            },
+        ),
         extra={"repo": "https://github.com/wolfgitpr/HubertFA"},
     ),
     ModelEntry(
@@ -98,7 +122,13 @@ BUNDLED_MODELS: list[ModelEntry] = [
         languages=("ja",),
         dir_name="kashi-g2p-onnx",
         required_files=("model.onnx",),
-        snapshots=(),
+        archives=(
+            {
+                "url": "https://github.com/Xiantaidu/kashi-g2p/releases/download/v1.0.0/models_onnx.zip",
+                "size": 109095482,
+                "sha256": "47b46e8028cfae5b908c08845796f661c8b8f8c7e5a8bb65a64d4bbc61dd35b3",
+            },
+        ),
         extra={"repo": "https://github.com/Xiantaidu/kashi-g2p"},
     ),
 ]
