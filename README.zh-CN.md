@@ -10,6 +10,8 @@
 - `POST /api/asr/transcribe`：**ASR 单句识别**（Qwen3-ASR / PinyinASR / RomajiASR）。
 - `WS /api/asr/streaming`：**流式 ASR**——通过 WebSocket 实时识别（仅 Qwen3-ASR）。
 - `POST /api/v2m/inference`：**Vocal2Midi**——人声转“带歌词对齐的 MIDI”（及 USTX/VSQX/TextGrid），以 zip 返回。
+- `POST /api/diffsinger/inference`：**DiffSinger（歌声合成 / SVS）**——用 OpenUtau 兼容声库渲染 `.ustx` 乐谱；自动生成音高（`pitd`），可连同更新后的乐谱一起返回。
+- `POST /api/diffsinger/pitch`：**仅自动音高**——`.ustx` → 带 `pitd` 曲线的 `.ustx`。
 - 缺失的 MSST 模型在首次推理时**自动下载**，支持 **ModelScope（默认）** 与 **Hugging Face**；
   RVC 音色模型从 `MSST_RVC_MODEL_DIR`（默认 `models/rvc_models`）读取。
 - 模型存放路径通过环境变量 `MSST_MODEL_DIR` 指定。
@@ -328,8 +330,74 @@ curl -X POST http://localhost:8000/api/v2m/inference \
 | `POST` | `/api/v2m/align` | 已知文本的强制对齐（TiFA，JSON） |
 | `POST` | `/api/v2m/g2p` | 字形转读音（kashi-g2p / 拼音） |
 
-> **所有**子系统的模型加载与推理（MSST、RVC、ASR、v2m）共用同一套全局 LRU 与并发预算
+> **所有**子系统的模型加载与推理（MSST、RVC、ASR、v2m、DiffSinger）共用同一套全局 LRU 与并发预算
 > （`MSST_MAX_LOADED_MODELS` / `MSST_MAX_CONCURRENCY`），且仅在请求真正需要时才懒加载模型。
+
+---
+
+## DiffSinger 歌声合成（`svs`）
+
+`POST /api/diffsinger/inference` 用 **OpenUtau 兼容的 DiffSinger 声库** 渲染 `.ustx` 乐谱，
+流程与 OpenUtau 一致：
+
+1. 对歌词做罗马化/音素化，并用 `dsdur`（linguistic + duration）预测音素时长；
+2. 运行 **自动音高** 模型（`dspitch`），把结果作为 `pitd`（音高偏差）曲线写回乐谱——即
+   `ustx → pitd + ustx`；
+3. 重新构建乐句，用方差（`dsvariance`）、声学与声码器（vocoder）ONNX 模型逐句渲染，
+   再按时间轴拼接成整首歌。
+
+声库目录需包含 `dsconfig.yaml`、`aco.phonemes.json`、`dsdict*.yaml`，以及
+`dsdur/`、`dspitch/`、`dsvariance/`、`dsvocoder/` 子目录。把此类目录放入
+`MSST_SVS_MODEL_DIR`（默认 `<MSST_MODEL_DIR>/svs`）即可。
+
+### 1. 列出声库
+
+```bash
+curl http://localhost:8000/api/diffsinger/models
+```
+
+### 2. 渲染乐谱
+
+```bash
+curl -X POST http://localhost:8000/api/diffsinger/inference \
+  -F "model=MyVoicebank" \
+  -F "ustx=@song.ustx" \
+  -F "language=auto" \
+  -F "output_format=wav" \
+  -o out.wav
+```
+
+加 `-F "return_ustx=true"` 会返回 zip，内含音频、重新生成的 `pitd` 乐谱
+（`<name>.pitd.ustx`）与 `manifest.json`。
+
+### 3. 仅生成自动音高
+
+```bash
+curl -X POST http://localhost:8000/api/diffsinger/pitch \
+  -F "model=MyVoicebank" -F "ustx=@song.ustx" -o song.pitd.ustx
+```
+
+### `POST /api/diffsinger/inference` 表单字段
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `ustx` | — | 待渲染的 OpenUtau 乐谱（必填）。 |
+| `model` | `MSST_SVS_DEFAULT_MODEL` | 声库 id（目录名），来自 `/api/diffsinger/models`。 |
+| `language` | `auto` | `auto`（按歌词/声库自动判断）/ `ja` / `zh`。 |
+| `generate_pitch` | `true` | 是否运行自动音高；`false` 时使用乐谱自带的 `pitd`。 |
+| `pitch_steps` | `20` | 自动音高模型的采样步数。 |
+| `variance_steps` | `20` | 方差模型的采样步数。 |
+| `steps` | `20` | 声学模型的采样步数。 |
+| `depth` | `1.0` | 扩散深度（受 `dsconfig.yaml` 的 `max_depth` 限制）。 |
+| `return_ustx` | `false` | 返回音频 + 重新生成 `pitd` 乐谱的 zip。 |
+| `output_format` | `wav` | `wav` / `flac` / `mp3`。 |
+| `bit_depth` | — | 如 `PCM_16`、`PCM_24`、`320k`。 |
+| `device` | `MSST_DEVICE` | ONNX Runtime 设备，如 `cuda:0` 或 `cpu`。 |
+
+> 只会使用声库声明的模型；缺少可选子模型（如无 `dspitch/`）时会优雅降级
+> （直接使用乐谱自带 `pitd`）。中文（`zh`）歌词可为拼音或汉字；汉字转换需要可选的
+> [`pypinyin`](https://pypi.org/project/pypinyin/) 包。
+> 自动音高的原理见 [`docs/diffsinger-autopitch.md`](docs/diffsinger-autopitch.md)。
 
 ---
 
@@ -354,6 +422,8 @@ curl -X POST http://localhost:8000/api/v2m/inference \
 | `MSST_V2M_MAX_CHUNK_SEC` | `30` | 每个 GAME 分块上限（秒），约束显存（0 关闭） |
 | `MSST_V2M_LANGUAGE_DETECT_SEC` | `30` | Qwen3-ASR 自动识别语言时采样的音频秒数 |
 | `MSST_V2M_DEFAULT_LANGUAGE` | `zh` | 识别不确定/不支持时的回退语言 |
+| `MSST_SVS_MODEL_DIR` | `<MSST_MODEL_DIR>/svs` | **DiffSinger 声库目录** |
+| `MSST_SVS_DEFAULT_MODEL` | 空 | 请求省略 `model` 时使用的声库 |
 | `MSST_GITHUB_PROXY` | `https://ghfast.top/` | GitHub 发布资产下载的前缀代理（留空则直连） |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | 监听地址与端口 |
 | `MSST_DEVICE` | `cuda:0` | 默认推理设备 |

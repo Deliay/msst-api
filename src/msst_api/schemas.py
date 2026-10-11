@@ -19,6 +19,8 @@ class HealthResponse(BaseModel):
     v2m_model_dir: str | None = None
     asr_loaded_models: list[str] = Field(default_factory=list)
     v2m_loaded_models: list[str] = Field(default_factory=list)
+    svs_model_dir: str | None = None
+    svs_loaded_models: list[str] = Field(default_factory=list)
     asr_streaming_backend: str | None = None
 
 
@@ -115,3 +117,22 @@ class RVCVoiceInfo(BaseModel):
 class RVCVoiceListResponse(BaseModel):
     total: int
     voices: list[RVCVoiceInfo]
+
+
+class SVSVoiceInfo(BaseModel):
+    id: str
+    name: str
+    author: str = ""
+    sample_rate: int = 44100
+    hop_size: int = 512
+    languages: list[str] = Field(default_factory=list)
+    has_pitch: bool = False
+    has_variance: bool = False
+    has_duration: bool = False
+    vocoder: str = ""
+    downloaded: bool = True
+
+
+class SVSVoiceListResponse(BaseModel):
+    total: int
+    voices: list[SVSVoiceInfo]

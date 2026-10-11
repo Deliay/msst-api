@@ -157,6 +157,17 @@ class Settings:
         or "zh"
     )
 
+    # --- DiffSinger (singing voice synthesis) -----------------------------
+    #: Directory holding OpenUtau DiffSinger voicebank folders.  Defaults to
+    #: ``<model_dir>/svs`` (``MSST_SVS_MODEL_DIR``).
+    svs_model_dir: Path | None = field(
+        default_factory=lambda: _env_path_opt("MSST_SVS_MODEL_DIR")
+    )
+    #: Voicebank used when a request omits ``model`` (``MSST_SVS_DEFAULT_MODEL``).
+    svs_default_model: str = field(
+        default_factory=lambda: os.environ.get("MSST_SVS_DEFAULT_MODEL", "").strip()
+    )
+
     # --- Server ------------------------------------------------------------
     host: str = field(default_factory=lambda: os.environ.get("MSST_HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: _env_int("MSST_PORT", 8000))
@@ -256,8 +267,11 @@ class Settings:
             self.asr_model_dir = self.model_dir / "asr"
         if self.v2m_model_dir is None:
             self.v2m_model_dir = self.model_dir / "v2m"
+        if self.svs_model_dir is None:
+            self.svs_model_dir = self.model_dir / "svs"
         self.asr_model_dir = Path(self.asr_model_dir).expanduser().resolve()
         self.v2m_model_dir = Path(self.v2m_model_dir).expanduser().resolve()
+        self.svs_model_dir = Path(self.svs_model_dir).expanduser().resolve()
         if self.asr_streaming_backend not in {"auto", "vllm", "transformers"}:
             self.asr_streaming_backend = "auto"
         if self.v2m_rmvpe_backend not in {"rvc", "onnx"}:

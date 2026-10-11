@@ -59,11 +59,16 @@ from .schemas import (
     ModelListResponse,
     RVCVoiceInfo,
     RVCVoiceListResponse,
+    SVSVoiceInfo,
+    SVSVoiceListResponse,
     V2MInferenceMetadata,
     V2MModelInfo,
     V2MModelListResponse,
 )
 from .separator import InferenceError, ModelManager, ModelSpec, resolve_device
+from .svs import SVSError, SVSVoiceNotFoundError
+from .svs.engine import SVSManager, SVSSpec
+from .svs.pipeline import SVSRequest, run_svs_pipeline
 from .v2m.manager import V2MError, V2MManager, V2MModelNotFoundError
 
 logging.basicConfig(
@@ -76,6 +81,7 @@ TAG = "MSST"
 RVC_TAG = "RVC"
 ASR_TAG = "ASR"
 V2M_TAG = "Vocal2Midi"
+SVS_TAG = "DiffSinger"
 
 
 @asynccontextmanager
@@ -87,6 +93,7 @@ async def lifespan(app: FastAPI):
     settings.rvc_asset_dir.mkdir(parents=True, exist_ok=True)
     settings.asr_model_dir.mkdir(parents=True, exist_ok=True)
     settings.v2m_model_dir.mkdir(parents=True, exist_ok=True)
+    settings.svs_model_dir.mkdir(parents=True, exist_ok=True)
     app.state.settings = settings
     # One governor shared by MSST, RVC, ASR and Vocal2Midi so
     # MSST_MAX_LOADED_MODELS and MSST_MAX_CONCURRENCY are global budgets across
@@ -98,6 +105,7 @@ async def lifespan(app: FastAPI):
     app.state.rvc_manager = RVCManager(settings, cache=shared_cache)
     app.state.asr_manager = ASRManager(settings, cache=shared_cache)
     app.state.v2m_manager = V2MManager(settings, cache=shared_cache)
+    app.state.svs_manager = SVSManager(settings, cache=shared_cache)
     # Let the vendored v2m runtimes route their loaders through the same cache.
     from .v2m import runtime as v2m_runtime
 
@@ -125,6 +133,7 @@ async def lifespan(app: FastAPI):
         app.state.rvc_manager.unload()
         app.state.asr_manager.unload()
         app.state.v2m_manager.unload()
+        app.state.svs_manager.unload()
 
 
 app = FastAPI(
@@ -153,6 +162,10 @@ def _asr_manager() -> ASRManager:
 
 def _v2m_manager() -> V2MManager:
     return app.state.v2m_manager
+
+
+def _svs_manager() -> SVSManager:
+    return app.state.svs_manager
 
 
 def _settings() -> Settings:
@@ -202,6 +215,16 @@ async def _v2m_model_not_found(request, exc: V2MModelNotFoundError):  # noqa: AN
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
+@app.exception_handler(SVSVoiceNotFoundError)
+async def _svs_voice_not_found(request, exc: SVSVoiceNotFoundError):  # noqa: ANN001
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(SVSError)
+async def _svs_error(request, exc: SVSError):  # noqa: ANN001
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
 # ---------------------------------------------------------------------------
 # Health / catalog
 # ---------------------------------------------------------------------------
@@ -219,6 +242,8 @@ def root() -> dict:
         "asr_models": "GET /api/asr/models",
         "v2m_inference": "POST /api/v2m/inference",
         "v2m_models": "GET /api/v2m/models",
+        "diffsinger_inference": "POST /api/diffsinger/inference",
+        "diffsinger_models": "GET /api/diffsinger/models",
     }
 
 
@@ -239,6 +264,8 @@ def health() -> HealthResponse:
         v2m_model_dir=str(settings.v2m_model_dir),
         asr_loaded_models=_asr_manager().loaded,
         v2m_loaded_models=_v2m_manager().loaded,
+        svs_model_dir=str(settings.svs_model_dir),
+        svs_loaded_models=_svs_manager().loaded,
         asr_streaming_backend=settings.asr_streaming_backend,
     )
 
@@ -1293,6 +1320,234 @@ def v2m_g2p(
             source=source,
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# DiffSinger (SVS)
+# ---------------------------------------------------------------------------
+def _svs_voice_info(voice) -> SVSVoiceInfo:  # noqa: ANN001
+    from .svs.voicebank import probe_voicebank
+
+    return SVSVoiceInfo(**probe_voicebank(voice.root))
+
+
+@app.get("/api/diffsinger/models", response_model=SVSVoiceListResponse, tags=[SVS_TAG])
+def list_svs_models() -> SVSVoiceListResponse:
+    items: list[SVSVoiceInfo] = []
+    for voice in _svs_manager().library.all():
+        try:
+            items.append(_svs_voice_info(voice))
+        except Exception:  # noqa: BLE001 - skip unreadable voicebanks
+            logger.exception("Skipping unreadable voicebank %s", voice.id)
+    return SVSVoiceListResponse(total=len(items), voices=items)
+
+
+@app.get("/api/diffsinger/models/{voice_id}", response_model=SVSVoiceInfo, tags=[SVS_TAG])
+def get_svs_model(voice_id: str) -> SVSVoiceInfo:
+    voice = _svs_manager().library.get(voice_id)
+    return _svs_voice_info(voice)
+
+
+_SVS_MEDIA_TYPES = {"wav": "audio/wav", "flac": "audio/flac", "mp3": "audio/mpeg"}
+
+
+def _header_safe(value: str) -> str:
+    """HTTP headers are latin-1; percent-encode anything outside it."""
+
+    try:
+        value.encode("latin-1")
+        return value
+    except UnicodeEncodeError:
+        from urllib.parse import quote
+
+        return quote(value)
+
+
+def _build_svs_request(form) -> SVSRequest:  # noqa: ANN001
+    return SVSRequest(
+        language=_form_str(form, "language", "auto") or "auto",
+        pitch_steps=_form_int(form, "pitch_steps", 20),
+        variance_steps=_form_int(form, "variance_steps", 20),
+        depth=_form_float(form, "depth", 1.0),
+        steps=_form_int(form, "steps", 20),
+        generate_pitch=_form_bool(form, "generate_pitch", True),
+        render=_form_bool(form, "render", True),
+    )
+
+
+async def _read_svs_form(request: Request):  # noqa: ANN202
+    form = await request.form()
+    upload = (
+        form.get("ustx")
+        or form.get("ustx_file")
+        or form.get("file")
+        or form.get("input")
+    )
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(
+            status_code=400, detail="multipart field 'ustx' (file) is required."
+        )
+    model_value = _form_str(form, "model") or _settings().svs_default_model
+    if not model_value:
+        raise HTTPException(
+            status_code=400,
+            detail="Field 'model' (voicebank id) is required.",
+        )
+    voice = _svs_manager().library.get(str(model_value))
+    return form, upload, voice
+
+
+@app.post("/api/diffsinger/inference", tags=[SVS_TAG])
+async def diffsinger_inference(request: Request):
+    """Render an OpenUtau ``ustx`` score to audio with a DiffSinger voicebank.
+
+    Runs auto-pitch (``pitd``) then the variance/acoustic/vocoder chain.  Returns
+    a single audio file by default; set ``return_ustx=true`` to get a zip with
+    the audio and the regenerated ``pitd`` score.
+    """
+
+    settings = _settings()
+    started = time.time()
+    form, upload, voice = await _read_svs_form(request)
+
+    output_format = (
+        _form_str(form, "output_format", "wav") or "wav"
+    ).strip().lower().lstrip(".")
+    if output_format not in _SVS_MEDIA_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output_format: {output_format}. Expected wav | flac | mp3",
+        )
+    bit_depth = _form_str(form, "bit_depth")
+    device = _form_str(form, "device") or settings.device
+    svs_request = _build_svs_request(form)
+    return_ustx = _form_bool(form, "return_ustx", False)
+
+    data = await upload.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty USTX upload")
+    max_bytes = int(settings.max_upload_mb * 1024 * 1024)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Upload exceeds MSST_MAX_UPLOAD_MB ({settings.max_upload_mb} MB)",
+        )
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="svs-", dir=str(settings.temp_dir)))
+    try:
+        ustx_path = save_upload(data, ".ustx", temp_dir)
+        spec = SVSSpec(root=voice.root, device=str(device))
+        try:
+            result = await run_in_threadpool(
+                _svs_manager().render, spec, str(ustx_path), svs_request
+            )
+        except (SVSVoiceNotFoundError, SVSError):
+            raise
+        except Exception as error:  # noqa: BLE001
+            logger.exception("DiffSinger inference failed")
+            raise HTTPException(
+                status_code=500, detail=f"DiffSinger inference failed: {error}"
+            ) from error
+
+        metadata = {
+            "model": voice.id,
+            "language": result.language,
+            "phonemizer": result.phonemizer,
+            "phrases": result.phrases,
+            "notes": result.notes,
+            "sample_rate": result.sample_rate,
+            "duration_seconds": round(result.duration_seconds, 3),
+            "pitch_steps": svs_request.pitch_steps,
+            "variance_steps": svs_request.variance_steps,
+            "depth": svs_request.depth,
+            "steps": svs_request.steps,
+            "elapsed_seconds": round(time.time() - started, 3),
+        }
+
+        if return_ustx or not svs_request.render:
+            files: dict[str, bytes] = {
+                f"{ustx_path.stem}.pitd.ustx": result.ustx_bytes,
+                "manifest.json": json.dumps(metadata, indent=2).encode("utf-8"),
+            }
+            if svs_request.render:
+                content = encode_audio(
+                    result.samples,
+                    result.sample_rate,
+                    fmt=output_format,
+                    subtype=bit_depth,
+                )
+                files[f"{ustx_path.stem}.{output_format}"] = content
+            archive = build_zip(files)
+            headers = {
+                "Content-Disposition": f'attachment; filename="{ustx_path.stem}.zip"',
+                "X-SVS-Model": _header_safe(voice.id),
+                "X-SVS-Language": result.language,
+            }
+            return Response(
+                content=archive, media_type="application/zip", headers=headers
+            )
+
+        content = encode_audio(
+            result.samples, result.sample_rate, fmt=output_format, subtype=bit_depth
+        )
+        headers = {
+            "Content-Disposition": f'inline; filename="output.{output_format}"',
+            "X-SVS-Model": _header_safe(voice.id),
+            "X-SVS-Language": result.language,
+            "X-SVS-Sample-Rate": str(result.sample_rate),
+            "X-SVS-Elapsed": f"{time.time() - started:.3f}",
+        }
+        return Response(
+            content=content, media_type=_SVS_MEDIA_TYPES[output_format], headers=headers
+        )
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@app.post("/api/diffsinger/pitch", tags=[SVS_TAG])
+async def diffsinger_pitch(request: Request):
+    """Auto-pitch only: ``ustx -> ustx`` with a generated ``pitd`` curve."""
+
+    settings = _settings()
+    started = time.time()
+    form, upload, voice = await _read_svs_form(request)
+    svs_request = _build_svs_request(form)
+    svs_request.render = False
+    svs_request.generate_pitch = True
+
+    data = await upload.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty USTX upload")
+    temp_dir = Path(tempfile.mkdtemp(prefix="svs-pitch-", dir=str(settings.temp_dir)))
+    try:
+        ustx_path = save_upload(data, ".ustx", temp_dir)
+        spec = SVSSpec(root=voice.root, device=str(_form_str(form, "device") or settings.device))
+        try:
+            result = await run_in_threadpool(
+                _svs_manager().render, spec, str(ustx_path), svs_request
+            )
+        except (SVSVoiceNotFoundError, SVSError):
+            raise
+        except Exception as error:  # noqa: BLE001
+            logger.exception("DiffSinger pitch generation failed")
+            raise HTTPException(
+                status_code=500, detail=f"DiffSinger pitch generation failed: {error}"
+            ) from error
+        headers = {
+            "Content-Disposition": f'inline; filename="{ustx_path.stem}.pitd.ustx"',
+            "X-SVS-Model": _header_safe(voice.id),
+            "X-SVS-Language": result.language,
+            "X-SVS-Elapsed": f"{time.time() - started:.3f}",
+        }
+        return Response(
+            content=result.ustx_bytes,
+            media_type="application/x-yaml",
+            headers=headers,
+        )
+    finally:
+        if not settings.keep_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def run() -> None:

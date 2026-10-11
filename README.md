@@ -16,6 +16,11 @@ Submit an audio file plus a model, and get the separated stems back.
   WebSocket (Qwen3-ASR only).
 - `POST /api/v2m/inference`: **Vocal2Midi** — vocal audio → lyric-aligned MIDI
   (and USTX/VSQX/TextGrid), returned as a zip.
+- `POST /api/diffsinger/inference`: **DiffSinger (SVS)** — render an OpenUtau
+  `.ustx` score with an OpenUtau-compatible DiffSinger voicebank; auto-pitch
+  (``pitd``) is generated and the score can be returned alongside the audio.
+- `POST /api/diffsinger/pitch`: **auto-pitch only** — `.ustx` → `.ustx` with a
+  generated ``pitd`` curve.
 - Missing MSST models are **downloaded automatically** on first use, from
   **ModelScope (default)** or **Hugging Face**; RVC voice models are read from
   `MSST_RVC_MODEL_DIR` (`models/rvc_models` by default).
@@ -406,10 +411,80 @@ Each pipeline stage is also exposed on its own:
 | `POST` | `/api/v2m/align` | Forced alignment of a known transcript (TiFA, JSON). |
 | `POST` | `/api/v2m/g2p` | Grapheme-to-phoneme reading (kashi-g2p / pinyin). |
 
-> Model loading and inference for **all** subsystems (MSST, RVC, ASR, v2m)
-> share the same global LRU and concurrency budgets
+> Model loading and inference for **all** subsystems (MSST, RVC, ASR, v2m,
+> DiffSinger) share the same global LRU and concurrency budgets
 > (`MSST_MAX_LOADED_MODELS` / `MSST_MAX_CONCURRENCY`), and every model is loaded
 > lazily only when a request needs it.
+
+---
+
+## DiffSinger singing voice synthesis (`svs`)
+
+`POST /api/diffsinger/inference` renders an OpenUtau `.ustx` score with an
+**OpenUtau-compatible DiffSinger voicebank**. The pipeline mirrors OpenUtau:
+
+1. romanize + phonemize the lyrics and predict phoneme durations (the `dsdur`
+   linguistic + duration models);
+2. run the **auto-pitch** model (`dspitch`) and write the result back into the
+   score as a `pitd` (pitch deviation) curve — the `ustx -> pitd + ustx` step;
+3. rebuild the phrases and render each with the variance (`dsvariance`),
+   acoustic, and vocoder ONNX models, placing the phrase audio on the timeline.
+
+A voicebank is a folder containing `dsconfig.yaml`, `aco.phonemes.json`,
+`dsdict*.yaml`, the `dsdur/`, `dspitch/`, `dsvariance/` and `dsvocoder/`
+sub-folders. Drop such folders under `MSST_SVS_MODEL_DIR`
+(`<MSST_MODEL_DIR>/svs` by default).
+
+### 1. List voicebanks
+
+```bash
+curl http://localhost:8000/api/diffsinger/models
+```
+
+### 2. Render a score
+
+```bash
+curl -X POST http://localhost:8000/api/diffsinger/inference \
+  -F "model=MyVoicebank" \
+  -F "ustx=@song.ustx" \
+  -F "language=auto" \
+  -F "output_format=wav" \
+  -o out.wav
+```
+
+Add `-F "return_ustx=true"` to get a zip containing the audio **and** the
+regenerated `pitd` score (`<name>.pitd.ustx`) plus a `manifest.json`.
+
+### 3. Auto-pitch only
+
+```bash
+curl -X POST http://localhost:8000/api/diffsinger/pitch \
+  -F "model=MyVoicebank" -F "ustx=@song.ustx" -o song.pitd.ustx
+```
+
+### `POST /api/diffsinger/inference` form fields
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `ustx` | — | The OpenUtau score to render (required). |
+| `model` | `MSST_SVS_DEFAULT_MODEL` | Voicebank id (folder name) from `/api/diffsinger/models`. |
+| `language` | `auto` | `auto` (detect from the lyrics/voicebank) / `ja` / `zh`. |
+| `generate_pitch` | `true` | Run the auto-pitch model; when `false` the score's own `pitd` is used. |
+| `pitch_steps` | `20` | Sampling steps for the auto-pitch model. |
+| `variance_steps` | `20` | Sampling steps for the variance model. |
+| `steps` | `20` | Sampling steps for the acoustic model. |
+| `depth` | `1.0` | Diffusion depth (clamped by `dsconfig.yaml`'s `max_depth`). |
+| `return_ustx` | `false` | Return a zip with the audio + regenerated `pitd` score. |
+| `output_format` | `wav` | `wav` / `flac` / `mp3`. |
+| `bit_depth` | — | e.g. `PCM_16`, `PCM_24`, `320k`. |
+| `device` | `MSST_DEVICE` | ONNX Runtime device, e.g. `cuda:0` or `cpu`. |
+
+> Only the models the voicebank declares are used; missing optional sub-models
+> (e.g. no `dspitch/`) degrade gracefully (the score's `pitd` is used as-is).
+> Chinese (`zh`) lyrics may be pinyin or hanzi; hanzi conversion needs the
+> optional [`pypinyin`](https://pypi.org/project/pypinyin/) package.
+> See [`docs/diffsinger-autopitch.md`](docs/diffsinger-autopitch.md) for how the
+> auto-pitch step works in OpenUtau.
 
 ---
 
@@ -434,6 +509,8 @@ Each pipeline stage is also exposed on its own:
 | `MSST_V2M_MAX_CHUNK_SEC` | `30` | Cap on each GAME chunk; bounds estimator VRAM (0 = off) |
 | `MSST_V2M_LANGUAGE_DETECT_SEC` | `30` | Audio sampled by Qwen3-ASR to auto-detect the language |
 | `MSST_V2M_DEFAULT_LANGUAGE` | `zh` | Fallback when detection is inconclusive / unsupported |
+| `MSST_SVS_MODEL_DIR` | `<MSST_MODEL_DIR>/svs` | **DiffSinger voicebank directory** |
+| `MSST_SVS_DEFAULT_MODEL` | empty | Voicebank used when a request omits `model` |
 | `MSST_GITHUB_PROXY` | `https://ghfast.top/` | Prefix proxy for GitHub release downloads (empty = direct) |
 | `MSST_HOST` / `MSST_PORT` | `0.0.0.0` / `8000` | Bind address and port |
 | `MSST_DEVICE` | `cuda:0` | Default inference device |
